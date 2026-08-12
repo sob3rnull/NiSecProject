@@ -33,8 +33,10 @@ Mirror your proposal's numbered subsections exactly:
   security alerts/reports.
 - **3.5 Possible threats** — the six threats.
 - **3.6 Vulnerabilities** — the five weaknesses.
-- **3.7 Risk assessment** — _your Threat/Risk Level/Reason table. Consider adding Likelihood and
-  Impact columns so the rating is derived rather than asserted — markers like visible reasoning._
+- **3.7 Risk assessment** — use **[`risk-assessment.md`](risk-assessment.md)**: Likelihood ×
+  Impact scales, derived scores, and a **residual risk** table showing what this system actually
+  bought. Include the "where this disagrees with the proposal" table — revising an earlier
+  judgement with stated reasoning reads as analysis; silently replacing it reads as an error.
 - **3.8 Expected solution** — _your paragraph; now point at the traceability table as proof._
 
 ## 4. Security Design Architecture
@@ -78,30 +80,49 @@ One subsection per attack: objective → command → expected → observed → e
 | 6 | Misconfiguration | Wazuh SCA | SCA module | _screenshot of CIS score_ |
 | 7 | _Bonus:_ web attack | Nikto/SQLi | Suricata | _screenshot_ |
 
-- **6.8 Detection summary table** — attack vs detected (Y/N) vs time-to-alert.
-  _A measured latency column directly evidences your "alerts as quickly as possible" NFR._
+- **6.8 Detection summary table** — run **`make measure`**; it writes this table into
+  `evidence/detection-results_*.md` with rule fired and time-to-alert per test, plus the method
+  note explaining why the numbers are trustworthy (single clock, no stale credit, 1 s resolution).
+  This is what evidences the "alerts as quickly as possible" NFR. _Keep any NOT DETECTED rows._
 - **6.9 Packet-level corroboration** — _Wireshark screenshots backing 1–3._
+- **6.10 Rule verification** — **`make test`** replays a synthetic pcap through Suricata offline
+  and asserts each custom SID fires. Cite it as evidence the signatures were validated
+  independently of the live pipeline, not just observed working once.
+- **6.11 Detection boundary** — **`make evasion`**. Report the technique → detected? → why table.
+  The slow-brute-force result (network signature evaded, host rule still catches it) is the
+  strongest single finding available here; give it its own paragraph.
 
 ## 7. Analysis and Discussion
 - **7.1 What worked** — _which detections were clean out of the box._
 - **7.2 What needed tuning** — _the ping flood almost certainly needed the custom threshold rule.
   Explain WHY the default ruleset missed it — this is your best "real understanding" moment._
-- **7.3 False positives** — _how many, what caused them, what you tuned._
-- **7.4 Limitations** — signature-based (zero-days evade), single subnet, IDS not IPS,
-  lab scale, encrypted traffic blind spot.
+- **7.3 False positives** — `make measure` records an **idle baseline** (alerts/hour with no
+  attack running). Report attack alert counts against that floor, and cite Axelsson's base-rate
+  fallacy [16 in `references.md`] to explain why a high-accuracy detector still floods an analyst
+  at realistic traffic volumes. A measurement plus the theory behind it beats either alone.
+- **7.4 Limitations** — driven by your `make evasion` results, not by guesswork: rate-based
+  thresholds are evadable by slowing down, `track by_src` is defeated by decoys, and encrypted
+  traffic is a structural blind spot for a passive IDS. Cite Ptacek & Newsham [15] — your results
+  are a lab reproduction of a 1998 paper, which reframes the section from "what failed" to
+  "what I replicated". Then the standing ones: single subnet, IDS not IPS, lab scale.
+  The **residual risk** table in `risk-assessment.md` §3 quantifies what remains.
 - **7.5 Security recommendations** ⭐ — _proposal objective 6 explicitly promises this. Give
   concrete recommendations: enforce key-based SSH, patch cadence, close unused ports, MFA on the
   dashboard, network segmentation. Tie each back to a vulnerability you listed in §3.6._
 
 ## 8. Conclusion and Future Work
 - _Restate the outcome against each objective (use the traceability table)._
-- Future work: IPS mode, active response, email/Telegram alerting, Windows endpoint,
-  MITRE ATT&CK mapping, anomaly-based detection.
+- **Coverage** — use [`attack-mapping.md`](attack-mapping.md): nine ATT&CK techniques across six
+  tactics, with the uncovered tactics named explicitly and the mapping's own limits stated.
+- Future work: IPS mode, email/Telegram alerting, Windows endpoint, anomaly-based detection, and
+  **quantifying active response** — enable `make active-response`, re-run `make measure`, and
+  report the change in time-to-block. `risk-assessment.md` §3 explains why that number is the
+  ceiling on every residual risk reduction in the project.
 
 ## References
-_IEEE or your department's style. Cite: Wazuh docs, Suricata docs, ET Open ruleset,
-OWASP for the web attacks, MITRE ATT&CK, NIST SP 800-94 (IDS/IPS guide) — the NIST citation
-is an easy credibility win._
+Use [`references.md`](references.md) — IEEE-formatted, with a table of which reference does real
+work where. The three that carry the most weight: **NIST SP 800-94** for IDS framing,
+**Ptacek & Newsham** for your evasion results, and **Axelsson** for your false-positive baseline.
 
 ## Appendices
 - **A** — Configuration files (`config/`)

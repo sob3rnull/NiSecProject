@@ -30,3 +30,7 @@ evidence/pcaps/*.pcapng
 
 # Docker deploy secrets
 deploy-docker/.env
+
+# Python bytecode (test fixture generator)
+__pycache__/
+*.pyc

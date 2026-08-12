@@ -79,7 +79,11 @@ Suricata and Wazuh are joined by **one file**: `/var/log/suricata/eve.json`.
 4. **Analysed** — the Manager decodes and rule-matches, assigning a severity.
 5. **Stored** — written to the Indexer for searching.
 6. **Displayed** — visible on the dashboard within seconds.
-7. **Responded** *(optional)* — active response blocks the attacking IP.
+7. **Responded** *(opt-in)* — active response blocks the attacking IP.
+   Implemented in `config/wazuh-manager/active-response.xml.snippet`; enable with
+   `make active-response`. Off by default because a control that writes firewall
+   DROP rules from log events should be switched on deliberately, not during a demo.
+   Steps 1–6 are the delivered system; step 7 is the loop being closed.
 
 ## Detection matrix
 
@@ -92,10 +96,18 @@ Suricata and Wazuh are joined by **one file**: `/var/log/suricata/eve.json`.
 | Unauthorized access | Access control + auth rules | ufw + built-in auth rules | `06_unauthorized_access_test.sh` |
 | Misconfiguration | Wazuh SCA (built-in) | CIS benchmark module | Dashboard → SCA |
 | _Bonus:_ web attack | Suricata | ET web sigs → rule 100110 | `04_web_attack.sh` |
+| _Boundary:_ evasion | **deliberately not detected** | — | `07_evasion_test.sh` |
 
 The viva point: **network** threats are caught by **Suricata**, **host** threats by **Wazuh's own
 rules and FIM** — and both land in one dashboard. That contrast is the entire argument for the
 two-tool design.
+
+`07_evasion_test.sh` turns that argument from an assertion into a measurement. A
+throttled SSH brute-force stays under the network signature's 20-connections-in-30s
+threshold and Suricata says nothing — while Wazuh's host rules alert anyway, because
+they count failed logins in `auth.log` rather than packets on the wire. One sensor
+misses exactly what the other catches. See `docs/attack-mapping.md` for how the
+coverage maps to ATT&CK, and where it does not.
 
 ## Ports
 

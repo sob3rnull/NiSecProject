@@ -1,0 +1,66 @@
+<!-- ============================================================
+     Active response — closes the loop from DETECT to RESPOND.
+
+     architecture.md describes a seven-step alert lifecycle whose step 7 is
+     "Responded (optional) — active response blocks the attacking IP". Until
+     now nothing implemented it, so the project stopped at step 6. This is
+     step 7.
+
+     ===============================================================
+     OPT-IN ON PURPOSE. Enable with:  make active-response
+     ===============================================================
+     It is not enabled during provisioning, because a control that
+     automatically inserts firewall DROP rules in response to log events can
+     lock you out of your own lab — and doing that mid-demo is worse than not
+     having the feature. Turn it on deliberately, after your detection
+     evidence is already captured.
+
+     SAFETY: the white_list below can never be blocked. It covers loopback,
+     the VirtualBox host adapter (192.168.56.1 — this is you), and the Wazuh
+     server itself. Only the attack zone can actually be dropped. Never remove
+     192.168.56.1 from that list.
+
+     WHAT TO MEASURE: run `make measure` before and after enabling this. The
+     interesting number is not that the block works — it is how long the
+     attacker had free rein between the first failed login and the DROP taking
+     effect. That window is the real-world value of the whole system, and
+     docs/risk-assessment.md §3 explains why it is what caps every residual
+     risk reduction in the project.
+     ============================================================ -->
+<ossec_config>
+
+  <!-- Hosts that must never be blocked, whatever the rules say. -->
+  <global>
+    <white_list>127.0.0.1</white_list>
+    <white_list>192.168.56.1</white_list>
+    <white_list>192.168.56.40</white_list>
+  </global>
+
+  <command>
+    <name>nisec-firewall-drop</name>
+    <executable>firewall-drop</executable>
+    <timeout_allowed>yes</timeout_allowed>
+  </command>
+
+  <!-- SSH brute force (rule 5712: "sshd: Multiple authentication failures").
+       timeout=180 means the block lifts itself after three minutes, so a
+       false positive costs you three minutes rather than a rebuild. -->
+  <active-response>
+    <command>nisec-firewall-drop</command>
+    <location>local</location>
+    <rules_id>5712</rules_id>
+    <timeout>180</timeout>
+  </active-response>
+
+  <!-- Our custom high-severity Suricata escalation (level 10+). Deliberately
+       narrower than "any Suricata alert": responding automatically to every
+       IDS signature is how an IDS becomes a self-inflicted denial of service,
+       which is itself worth a sentence in report §7.5. -->
+  <active-response>
+    <command>nisec-firewall-drop</command>
+    <location>local</location>
+    <rules_id>100101</rules_id>
+    <timeout>180</timeout>
+  </active-response>
+
+</ossec_config>

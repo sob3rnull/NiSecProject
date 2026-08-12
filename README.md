@@ -21,8 +21,11 @@ you view from a single dashboard.
 | Understand the design | [`docs/architecture.md`](docs/architecture.md) |
 | Prove I delivered what I promised | [`docs/proposal-traceability.md`](docs/proposal-traceability.md) |
 | Write the report | [`docs/report-skeleton.md`](docs/report-skeleton.md) |
+| Justify my risk ratings | [`docs/risk-assessment.md`](docs/risk-assessment.md) |
+| Show coverage against a framework | [`docs/attack-mapping.md`](docs/attack-mapping.md) |
+| Cite something | [`docs/references.md`](docs/references.md) |
 
-**Quickest path:** `make up` → wait → `make healthcheck` → `make attacks`.
+**Quickest path:** `make up` → wait → `make healthcheck` → `make test` → `make measure`.
 
 ---
 
@@ -49,6 +52,19 @@ make up-budget           # 3 VMs instead, for 8 GB hosts
 make healthcheck         # verify every service across the lab
 ```
 
+> **On Windows:** `make` is not installed by default, so none of the commands in this
+> repo will run until you have it. Either install it —
+> `choco install make` or `scoop install make`, then use Git Bash — or skip `make`
+> entirely and run the underlying command, which is always in the Makefile:
+>
+> ```bash
+> vagrant up                          # instead of: make up
+> bash scripts/healthcheck.sh         # instead of: make healthcheck
+> bash scripts/measure-detection.sh   # instead of: make measure
+> ```
+>
+> Everything else assumes Git Bash rather than PowerShell — the scripts are POSIX shell.
+
 Get your dashboard password (randomly generated at install):
 
 ```bash
@@ -70,6 +86,44 @@ Run `make help` for every target.
 
 ---
 
+## From apparatus to evidence
+
+Building the lab is not the project — **producing defensible results is**. Four
+targets take you from "it runs" to "here are the numbers, and here is why you
+can trust them":
+
+```bash
+make test        # 1. Do the rules match the traffic they claim to? (offline, no lab traffic needed)
+make measure     # 2. Detection rate, which rule fired, time-to-alert -> evidence/*.md
+make evasion     # 3. Where does detection STOP working? (misses are the result)
+make seal        # 4. Hash the evidence so you can prove it didn't change
+```
+
+**`make test`** replays a synthetic pcap through Suricata offline and asserts each
+custom SID fires. Run it first whenever a live attack produces no alert: if the
+rules pass here, the fault is in the pipeline, not the signatures — that one
+distinction saves hours of blind debugging.
+
+**`make measure`** is the instrument this project needs to make a quantitative
+claim. It reads every timestamp from the Wazuh manager's own clock, so VM skew
+cannot contaminate the latency, records a `NOT DETECTED` row when nothing fires,
+and measures an idle baseline so "we saw N alerts" can be read against the noise
+floor. It writes a markdown table straight into `evidence/`.
+
+**`make evasion`** is the one that separates a good project from a working one.
+It deliberately stays under each threshold — slow scan, decoy sources,
+fragmentation, throttled brute-force, encrypted payload. Most of it is *expected
+not to alert*. The headline result: a slow SSH brute-force slips past the network
+signature while Wazuh's host rules catch it anyway, because they count failed
+logins rather than packets. That is the empirical argument for running Suricata
+**and** Wazuh — have it ready before anyone asks why one sensor wasn't enough.
+
+Optionally, `make active-response` closes the loop from detect to respond. It is
+opt-in by design: it writes firewall DROP rules from log events, so enable it
+deliberately and only after your detection evidence is captured.
+
+---
+
 ## Test suite → proposal threats
 
 Each test maps to a threat from your proposal's risk assessment:
@@ -83,6 +137,7 @@ Each test maps to a threat from your proposal's risk assessment:
 | 5 | Unauthorized access | `06_unauthorized_access_test.sh` | Unauthorized access | Kali |
 | 6 | Misconfiguration | *no script* — Dashboard → SCA | Misconfiguration (Medium) | Dashboard |
 | 7 | Web attack | `04_web_attack.sh` | *BONUS — beyond submitted scope* | Kali |
+| 8 | **Detection boundary** | `07_evasion_test.sh` | *Maps the limits of 1–3* | Kali |
 
 Test 4 is safe: it uses the **EICAR test string** (the industry-standard harmless AV test file),
 creates its own throwaway binary rather than touching real system commands, and cleans up
@@ -122,12 +177,14 @@ nisec-lab/
 │   ├── suricata/            #   custom threshold rules + config notes
 │   ├── wazuh-agent/         #   eve.json localfile + FIM/rootcheck snippets
 │   └── wazuh-manager/       #   custom rules (100101+) & decoders
-├── attacks/                 # 6 test scripts mapped to the proposal's threats
+├── attacks/                 # 7 test scripts: 6 threats + the evasion boundary
 ├── capture/                 # Wireshark/tshark capture + analysis
-├── scripts/                 # healthcheck, hardening, log retention
+├── tests/                   # offline rule regression (pcap replay, no lab needed)
+├── scripts/                 # healthcheck, hardening, retention, MEASUREMENT
 ├── dvwa/                    # [BONUS] vulnerable web app target
-├── evidence/                # screenshots / logs / pcaps (media git-ignored)
-└── docs/                    # guide, runbook, architecture, traceability, report
+├── evidence/                # screenshots / logs / pcaps / results (media git-ignored)
+└── docs/                    # guide, runbook, architecture, traceability, report,
+                             #   risk assessment, ATT&CK mapping, references
 ```
 
 ---

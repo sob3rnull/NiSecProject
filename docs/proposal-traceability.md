@@ -15,7 +15,13 @@ Status: **DONE** = scaffolded and ready to run · **RUN** = you must execute and
 | 3 | Configure Suricata to detect suspicious traffic | `provision/monitored-server.sh`, `config/suricata/` | DONE |
 | 4 | Connect Wazuh and Suricata together | `config/wazuh-agent/ossec.conf.snippet` + rules `100100-100120` | DONE |
 | 5 | Test with simulated attacks | `attacks/01`–`attacks/06` | RUN |
-| 6 | Analyze results, suggest improvements | `docs/report-skeleton.md` §7–8 | RUN |
+| 6 | Analyze results, suggest improvements | `scripts/measure-detection.sh`, `attacks/07_evasion_test.sh`, `docs/risk-assessment.md`, `docs/report-skeleton.md` §7–8 | RUN |
+
+> **Objective 6 is where marks are won or lost.** Objectives 1–5 are build work and this repo
+> completes them. Objective 6 asks you to *analyse*, and analysis needs numbers: `make measure`
+> produces the detection/latency/baseline table, `make evasion` produces the boundary where
+> detection stops, and `docs/risk-assessment.md` turns asserted risk ratings into derived ones
+> with a residual column. Run them and the analysis writes itself from real data.
 
 ## Functional requirements
 
@@ -33,7 +39,7 @@ Status: **DONE** = scaffolded and ready to run · **RUN** = you must execute and
 | Proposal requirement | Implementation | Status |
 |---|---|---|
 | Run 24/7 without crashing | `systemd` units w/ `restart: always`; `scripts/healthcheck.sh` | DONE |
-| Alerts appear as quickly as possible | Suricata realtime + FIM `realtime="yes"`; measure and report latency | RUN |
+| Alerts appear as quickly as possible | Suricata realtime + FIM `realtime="yes"`; **measured** by `make measure` (single-clock method, 1 s resolution) | RUN |
 | Dashboard easy to understand | Severity-graded rules so high-severity stands out | DONE |
 | **Monitor more than one device at once** | Two agents (`monitored`, `client`) — keep both if RAM allows | DONE |
 | **Only authorized users access the dashboard** | `scripts/harden-dashboard.sh` (ufw, roles, timeout, no defaults) | DONE |
@@ -96,3 +102,10 @@ Clearly-labelled extras. Present as "additional work", never as core scope:
 | Containerised Wazuh stack | `deploy-docker/` | Two deployment models to compare |
 | Custom Suricata threshold rules | `config/suricata/local.rules` | Demonstrates real rule-writing skill |
 | Packet capture + analysis | `capture/` | Corroborates alerts with raw evidence |
+| **Detection measurement harness** | `scripts/measure-detection.sh` | Turns the lab from apparatus into an experiment: detection rate, rule fired, time-to-alert, idle baseline — with a stated method |
+| **Offline rule regression tests** | `tests/` | Proves the signatures match their traffic independently of the live pipeline. Dependency-free pcap generator; no lab traffic needed |
+| **Evasion / boundary testing** | `attacks/07_evasion_test.sh` | Maps where detection stops. Reproduces Ptacek & Newsham (1998) in your own lab |
+| **Derived risk assessment** | `docs/risk-assessment.md` | NIST SP 800-30 method: L × I scoring plus a residual-risk column quantifying what the system bought |
+| **ATT&CK + NIST CSF mapping** | `docs/attack-mapping.md` | Coverage claims made checkable against a public framework, with the mapping's own limits stated |
+| **Active response** | `config/wazuh-manager/active-response.xml.snippet` | Implements step 7 of the alert lifecycle that `architecture.md` describes. Opt-in, with a white list that cannot lock you out |
+| **Evidence integrity manifest** | `scripts/seal-evidence.sh` | SHA-256 over `evidence/`, with an honest note on what a co-located manifest does and does not prove |

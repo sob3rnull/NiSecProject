@@ -2,7 +2,8 @@
 SHELL := /bin/bash
 
 .PHONY: help up up-budget up-docker halt destroy status reload provision \
-        healthcheck harden retention attacks malware-test capture dvwa ssh-%
+        healthcheck harden retention attacks malware-test capture dvwa ssh-% \
+        test measure evasion active-response seal
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_%-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -53,6 +54,21 @@ attacks:       ## Run the detection test suite from Kali
 
 malware-test:  ## Run the FIM / ransomware test on the monitored server
 	vagrant ssh monitored -c 'sudo bash /vagrant/attacks/05_malware_fim_test.sh'
+
+test:          ## Regression-test the detection rules offline (pcap replay)
+	bash tests/test-rules.sh
+
+measure:       ## MEASURE detection: rate, rule, time-to-alert -> evidence/
+	bash scripts/measure-detection.sh
+
+evasion:       ## Probe the detection BOUNDARY (expect misses - that's the result)
+	vagrant ssh kali -c 'bash /vagrant/attacks/07_evasion_test.sh'
+
+active-response: ## [OPT-IN] Enable automatic blocking (detect -> respond)
+	vagrant ssh wazuh-server -c 'sudo bash /vagrant/scripts/enable-active-response.sh'
+
+seal:          ## Hash evidence/ into a manifest (use --verify later)
+	bash scripts/seal-evidence.sh
 
 capture:       ## 60s packet capture on the monitored server (Wireshark evidence)
 	vagrant ssh monitored -c 'sudo bash /vagrant/capture/capture.sh 60'
