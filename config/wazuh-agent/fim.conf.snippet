@@ -1,0 +1,49 @@
+<!-- ============================================================
+     File Integrity Monitoring (FIM) + rootcheck.
+     Closes the "Malware / ransomware" (HIGH) and "Unauthorized
+     access" threats from the proposal's risk assessment, which
+     signature-based network detection alone does not cover.
+
+     FIM = Wazuh hashes watched files and alerts when one changes.
+     realtime="yes" means you get the alert in seconds, not on the
+     next scan cycle — important for the demo.
+     ============================================================ -->
+<ossec_config>
+
+  <syscheck>
+    <disabled>no</disabled>
+    <!-- full scan every 6h; realtime watches fire immediately -->
+    <frequency>21600</frequency>
+    <scan_on_start>yes</scan_on_start>
+    <alert_new_files>yes</alert_new_files>
+
+    <!-- System binaries & config: change here = tampering -->
+    <directories check_all="yes" realtime="yes">/etc,/usr/bin,/usr/sbin</directories>
+    <directories check_all="yes" realtime="yes">/bin,/sbin,/boot</directories>
+
+    <!-- A honeypot-ish watched folder for the demo -->
+    <directories check_all="yes" realtime="yes" report_changes="yes">/var/www/monitored</directories>
+
+    <!-- Noise reduction: these change constantly and legitimately -->
+    <ignore>/etc/mtab</ignore>
+    <ignore>/etc/hosts.deny</ignore>
+    <ignore>/etc/random-seed</ignore>
+    <ignore>/etc/adjtime</ignore>
+    <ignore>/etc/resolv.conf</ignore>
+    <ignore type="sregex">.log$|.swp$</ignore>
+  </syscheck>
+
+  <!-- rootcheck: rootkit signatures, hidden processes/ports, bad perms -->
+  <rootcheck>
+    <disabled>no</disabled>
+    <check_files>yes</check_files>
+    <check_trojans>yes</check_trojans>
+    <check_dev>yes</check_dev>
+    <check_sys>yes</check_sys>
+    <check_pids>yes</check_pids>
+    <check_ports>yes</check_ports>
+    <check_if>yes</check_if>
+    <frequency>3600</frequency>
+  </rootcheck>
+
+</ossec_config>

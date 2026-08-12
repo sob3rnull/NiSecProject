@@ -1,0 +1,12 @@
+<!-- ============================================================
+     Suricata integration — added by provision/monitored-server.sh
+     Tells the Wazuh agent to tail Suricata's JSON alert log and
+     forward every line to the Manager, which decodes it as
+     'suricata' events (see wazuh-manager/local_decoder.xml).
+     ============================================================ -->
+<ossec_config>
+  <localfile>
+    <log_format>json</log_format>
+    <location>/var/log/suricata/eve.json</location>
+  </localfile>
+</ossec_config>

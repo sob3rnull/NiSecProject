@@ -1,0 +1,32 @@
+# Vagrant
+.vagrant/
+*.log
+
+# Wazuh install artifacts / secrets
+wazuh-install-files.tar
+wazuh-install.sh
+*.pem
+*.key
+passwords.wazuh
+credentials.txt
+
+# Suricata data (can be huge)
+eve.json
+*.pcap
+
+# Evidence you capture locally (keep the folders, not the media)
+evidence/**/*.png
+evidence/**/*.jpg
+evidence/**/*.mp4
+evidence/**/*.gif
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Packet captures (large binaries)
+evidence/pcaps/*.pcap
+evidence/pcaps/*.pcapng
+
+# Docker deploy secrets
+deploy-docker/.env

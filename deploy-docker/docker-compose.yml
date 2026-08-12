@@ -1,0 +1,85 @@
+# Wazuh single-node stack in Docker.
+# ALTERNATIVE deployment path — see deploy-docker/README.md.
+# The default/primary path is the all-in-one installer (provision/wazuh-server.sh),
+# which is more forgiving on small hosts. This compose file exists because the
+# project proposal states the Ubuntu Server "runs Docker containers for easier
+# deployment" — so you can demonstrate and defend the containerised deployment.
+#
+# Upstream reference: https://github.com/wazuh/wazuh-docker (single-node)
+
+services:
+  wazuh.manager:
+    image: wazuh/wazuh-manager:4.14.0
+    container_name: wazuh.manager
+    restart: always
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile:  { soft: 655360, hard: 655360 }
+    ports:
+      - "1514:1514"      # agent data
+      - "1515:1515"      # agent enrolment
+      - "514:514/udp"    # syslog
+      - "55000:55000"    # Wazuh API
+    environment:
+      - INDEXER_URL=https://wazuh.indexer:9200
+      - INDEXER_USERNAME=admin
+      - INDEXER_PASSWORD=${INDEXER_PASSWORD:?INDEXER_PASSWORD must be set in .env}
+      - FILEBEAT_SSL_VERIFICATION_MODE=none
+    volumes:
+      - wazuh_api_config:/var/ossec/api/configuration
+      - wazuh_etc:/var/ossec/etc
+      - wazuh_logs:/var/ossec/logs
+      - wazuh_queue:/var/ossec/queue
+      - wazuh_var_multigroups:/var/ossec/var/multigroups
+      - wazuh_integrations:/var/ossec/integrations
+      - wazuh_active_response:/var/ossec/active-response/bin
+      - wazuh_agentless:/var/ossec/agentless
+      - wazuh_wodles:/var/ossec/wodles
+      # our custom rules/decoders, mounted read-only
+      - ../config/wazuh-manager/local_rules.xml:/var/ossec/etc/rules/local_rules.xml:ro
+      - ../config/wazuh-manager/local_decoder.xml:/var/ossec/etc/decoders/local_decoder.xml:ro
+
+  wazuh.indexer:
+    image: wazuh/wazuh-indexer:4.14.0
+    container_name: wazuh.indexer
+    restart: always
+    ports:
+      - "9200:9200"
+    environment:
+      - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g   # keep small for lab hosts
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile:  { soft: 65536, hard: 65536 }
+    volumes:
+      - wazuh_indexer_data:/var/lib/wazuh-indexer
+
+  wazuh.dashboard:
+    image: wazuh/wazuh-dashboard:4.14.0
+    container_name: wazuh.dashboard
+    restart: always
+    ports:
+      - "443:5601"
+    environment:
+      - INDEXER_USERNAME=admin
+      - INDEXER_PASSWORD=${INDEXER_PASSWORD:?INDEXER_PASSWORD must be set in .env}
+      - WAZUH_API_URL=https://wazuh.manager
+      - API_USERNAME=wazuh-wui
+      - API_PASSWORD=${API_PASSWORD:?API_PASSWORD must be set in .env}
+    depends_on:
+      - wazuh.indexer
+    links:
+      - wazuh.indexer:wazuh.indexer
+      - wazuh.manager:wazuh.manager
+
+volumes:
+  wazuh_api_config:
+  wazuh_etc:
+  wazuh_logs:
+  wazuh_queue:
+  wazuh_var_multigroups:
+  wazuh_integrations:
+  wazuh_active_response:
+  wazuh_agentless:
+  wazuh_wodles:
+  wazuh_indexer_data:

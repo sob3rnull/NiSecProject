@@ -1,0 +1,22 @@
+# Line endings are NOT cosmetic in this repo.
+#
+# Everything here executes inside the Linux VMs through the /vagrant shared
+# folder. A shell script checked out with CRLF dies immediately with
+#   /usr/bin/env: 'bash\r': No such file or directory
+# and a Makefile with CRLF breaks its recipes ("missing separator", or a
+# stray \r appended to every command). Windows git defaults to
+# core.autocrlf=true, so without this file a fresh clone on Windows produces
+# a lab where not one script runs.
+#
+# Pin LF for every text file regardless of anyone's core.autocrlf setting.
+# This matches .editorconfig, which already declares end_of_line = lf.
+* text=auto eol=lf
+
+# Evidence artefacts: never transform these.
+*.pcap   binary
+*.pcapng binary
+*.png    binary
+*.jpg    binary
+*.gif    binary
+*.mp4    binary
+*.tar    binary

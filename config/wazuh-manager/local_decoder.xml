@@ -1,0 +1,9 @@
+<!-- local_decoder.xml
+     Wazuh already ships a JSON decoder that handles Suricata eve.json out
+     of the box (it keys on program_name/"suricata"). This file is here so
+     you have a place to add custom field extraction if you later log
+     non-JSON sources. Left minimal on purpose — the built-in JSON decoder
+     does the heavy lifting for eve.json. -->
+<decoder name="nisec-placeholder">
+  <prematch>^NISEC_CUSTOM</prematch>
+</decoder>

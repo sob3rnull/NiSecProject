@@ -1,0 +1,82 @@
+<!-- local_rules.xml — NISec custom rules on the Wazuh Manager.
+     Rule IDs use the user range 100000+.
+     After editing: sudo systemctl restart wazuh-manager
+     Test a log line with: /var/ossec/bin/wazuh-logtest
+
+     IMPORTANT DESIGN NOTE
+     Wazuh already ships built-in Suricata rules (the 86600-86699 range, in
+     ruleset/rules/0475-suricata_rules.xml) which decode eve.json and raise a
+     base alert. Writing our own <decoded_as>json</decoded_as> catch-all would
+     match the SAME events and produce DUPLICATE alerts for every packet
+     Suricata flags — doubling dashboard noise and making alert counts in the
+     report wrong.
+     So we EXTEND the built-ins with <if_sid> instead of competing with them.
+     86601 = "Suricata: Alert - <signature>" is the parent we hang ours off. -->
+<group name="nisec,suricata,">
+
+  <!-- Escalate by Suricata's own severity (1 = most severe). -->
+  <rule id="100101" level="10">
+    <if_sid>86601</if_sid>
+    <field name="alert.severity">^1$</field>
+    <description>Suricata: HIGH severity alert - $(alert.signature)</description>
+    <group>ids,attack,</group>
+  </rule>
+
+  <rule id="100102" level="7">
+    <if_sid>86601</if_sid>
+    <field name="alert.severity">^2$</field>
+    <description>Suricata: medium severity alert - $(alert.signature)</description>
+    <group>ids,</group>
+  </rule>
+
+  <!-- Web-attack signatures (SQLi/XSS/scanner) from ET Open. [bonus scope] -->
+  <rule id="100110" level="10">
+    <if_sid>86601</if_sid>
+    <field name="alert.category">Web Application Attack</field>
+    <description>Suricata: web application attack - $(alert.signature)</description>
+    <group>web,attack,</group>
+  </rule>
+
+  <!-- Our custom threshold sigs (SID 9000001-9000003 from local.rules).
+       These are the ping-flood and port-scan detections the default ET
+       ruleset does not reliably catch. -->
+  <rule id="100120" level="10">
+    <if_sid>86601</if_sid>
+    <field name="alert.signature_id">^900000\d$</field>
+    <description>NISec custom Suricata signature fired - $(alert.signature)</description>
+    <group>ids,attack,</group>
+  </rule>
+
+</group>
+
+<!-- ================================================================
+     Malware / integrity rules — cover the proposal's
+     "Malware or ransomware" (HIGH) and "Unauthorized access" threats.
+     These extend Wazuh's built-in syscheck rules (550/554).
+     ================================================================ -->
+<group name="nisec,syscheck,malware,">
+
+  <!-- A file appeared in the watched web folder -->
+  <rule id="100200" level="10">
+    <if_sid>554</if_sid>
+    <field name="file">/var/www/monitored</field>
+    <description>NISec: new file created in monitored directory - possible malware drop</description>
+    <group>syscheck,attack,</group>
+  </rule>
+
+  <!-- A binary in a system path was modified -->
+  <rule id="100201" level="12">
+    <if_group>syscheck_entry_modified</if_group>
+    <field name="file">^/usr/bin|^/usr/sbin|^/bin|^/sbin</field>
+    <description>NISec: system binary modified - possible rootkit/tampering</description>
+    <group>syscheck,attack,</group>
+  </rule>
+
+  <!-- Many files changed fast = ransomware-like behaviour -->
+  <rule id="100202" level="13" frequency="10" timeframe="60">
+    <if_matched_sid>550</if_matched_sid>
+    <description>NISec: many files modified in 60s - possible ransomware activity</description>
+    <group>syscheck,attack,</group>
+  </rule>
+
+</group>

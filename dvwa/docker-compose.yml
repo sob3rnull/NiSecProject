@@ -1,0 +1,13 @@
+# DVWA (Damn Vulnerable Web Application) — a deliberately insecure web app,
+# run in an isolated container on the monitored server as an attack target.
+# Reachable at http://192.168.56.20:80/  (login admin / password).
+services:
+  dvwa:
+    # Pinned for reproducibility: an unpinned :latest can change between your
+    # testing and your marking, invalidating your documented results.
+    image: vulnerables/web-dvwa:1.9
+    container_name: dvwa
+    restart: unless-stopped
+    ports:
+      - "80:80"          # host :80 -> container :80 ; attack via monitored IP
+    # DVWA is intentionally vulnerable; keep it ONLY on the host-only lab net.
