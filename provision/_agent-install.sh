@@ -12,12 +12,16 @@ WAZUH_GPG_FPR="0DCFCA5547B19D2A6099506096B3EE5F29111145"
 install_agent() {
   local server_ip="$1" agent_name="$2"
 
-  if dpkg -l wazuh-agent >/dev/null 2>&1; then
+  # `dpkg -l` also succeeds for a removed-but-not-purged package (state 'rc'),
+  # which would make us skip the install and then fail on systemctl. Query the
+  # actual status instead.
+  if [ "$(dpkg-query -W -f='${db:Status-Status}' wazuh-agent 2>/dev/null || true)" = "installed" ]; then
     echo "[agent] wazuh-agent already installed."
   else
     echo "[agent] adding Wazuh apt repo..."
     local keyring=/usr/share/keyrings/wazuh.gpg
-    curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH \
+    # -f so an HTTP error page is never piped into gpg as if it were a key.
+    curl -fsSL https://packages.wazuh.com/key/GPG-KEY-WAZUH \
       | sudo gpg --no-default-keyring --keyring "gnupg-ring:${keyring}" --import
     sudo chmod 644 "$keyring"
 

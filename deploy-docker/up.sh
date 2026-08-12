@@ -36,25 +36,39 @@ ERR
   exit 1
 fi
 
-# --- certificates ---------------------------------------------------------
-# The official single-node stack needs TLS certs generated before first boot.
-# Failing loudly here is deliberate: silently continuing produces a confusing
-# TLS error several minutes later, which is far harder to diagnose.
-if [ ! -d config/wazuh_indexer_ssl_certs ]; then
+# --- certificates + indexer/dashboard config ------------------------------
+# The official single-node stack needs TLS certs AND the indexer/dashboard
+# config trees generated before first boot; docker-compose.yml mounts all
+# three. Failing loudly here is deliberate: silently continuing produces a
+# confusing TLS error several minutes later, which is far harder to diagnose.
+MISSING=""
+for d in config/wazuh_indexer_ssl_certs config/wazuh_indexer config/wazuh_dashboard; do
+  [ -d "$d" ] || MISSING="${MISSING}  ${d}\n"
+done
+if [ -n "$MISSING" ]; then
+  echo "[deploy-docker] MISSING UPSTREAM CONFIG — cannot start. Absent:" >&2
+  printf "%b" "$MISSING" >&2
   cat >&2 <<'ERR'
-[deploy-docker] MISSING CERTIFICATES — cannot start.
 
-  This compose file needs the certificates produced by the official
-  wazuh-docker cert generator. One-time setup:
+  This compose file reuses the official wazuh-docker single-node config tree
+  and the certificates its generator produces. One-time setup:
 
     git clone --depth 1 -b v4.14.0 https://github.com/wazuh/wazuh-docker.git /tmp/wazuh-docker
     cd /tmp/wazuh-docker/single-node
     docker compose -f generate-indexer-certs.yml run --rm generator
-    cp -r config/wazuh_indexer_ssl_certs <this-directory>/config/
+    cp -r config/* <this-directory>/config/
 
   Then re-run ./up.sh
 
-  (Or just use the all-in-one installer, which handles certs for you:
+  NOTE ON THE INDEXER PASSWORD: the indexer's admin password comes from the
+  bcrypt hash in config/wazuh_indexer/internal_users.yml, NOT from .env — the
+  .env values are what the manager and dashboard present when they connect.
+  To make them match, hash your INDEXER_PASSWORD and paste it into that file:
+
+    docker run --rm -ti wazuh/wazuh-indexer:4.14.0 \
+      bash /usr/share/wazuh-indexer/plugins/opensearch-security/tools/hash.sh -p '<your password>'
+
+  (Or just use the all-in-one installer, which handles all of this for you:
    provision/wazuh-server.sh — see README.md for the trade-offs.)
 ERR
   exit 1
@@ -78,7 +92,10 @@ for i in $(seq 1 40); do
   code="$(curl -sk -o /dev/null -w '%{http_code}' https://localhost/ || true)"
   if [ "$code" = "200" ] || [ "$code" = "302" ]; then
     echo "[deploy-docker] up! https://192.168.56.40"
-    echo "[deploy-docker] user: admin   password: see INDEXER_PASSWORD in .env"
+    echo "[deploy-docker] user: admin"
+    echo "[deploy-docker] password: whatever is hashed in"
+    echo "[deploy-docker]           config/wazuh_indexer/internal_users.yml"
+    echo "[deploy-docker]           (INDEXER_PASSWORD in .env must match it)"
     exit 0
   fi
   sleep 5

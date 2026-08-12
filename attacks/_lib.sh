@@ -26,18 +26,27 @@ if [ ! -d /vagrant ]; then
   DEFAULT_LOGDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/evidence/logs"
 fi
 LOGDIR="${LOGDIR:-$DEFAULT_LOGDIR}"
-mkdir -p "$LOGDIR" 2>/dev/null || LOGDIR="/tmp/nisec-logs" && mkdir -p "$LOGDIR"
+if ! mkdir -p "$LOGDIR" 2>/dev/null; then
+  LOGDIR="/tmp/nisec-logs"
+  mkdir -p "$LOGDIR"
+fi
 
 _ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
 log() { echo "[$(_ts)] $*"; }
 
+# log_path <label> : the timestamped evidence-log path for <label>. One place
+# owns the naming convention so every test's evidence lands the same way.
+log_path() { echo "${LOGDIR}/${1}_$(date +%Y%m%d_%H%M%S).log"; }
+
 # run_logged <label> <command...> : echo, run, and tee output to a log file.
-# Returns the command's own exit status (not tee's), and never aborts the
-# caller — the caller decides what a non-zero status means.
+# Returns the command's OWN exit status (not tee's) so the caller can decide
+# what a non-zero status means. This matters: run_all.sh's PASS/done summary
+# reads that status, and several tools here exit non-zero on their EXPECTED
+# outcome — a caller that wants to ignore it appends `|| true`.
 run_logged() {
   local label="$1"; shift
-  local logfile="${LOGDIR}/${label}_$(date +%Y%m%d_%H%M%S).log"
+  local logfile; logfile="$(log_path "$label")"
   local rc=0
   log "=== ${label} -> ${TARGET} ==="
   log "cmd: $*"
@@ -45,5 +54,5 @@ run_logged() {
   { echo "# $(_ts)  $*"; "$@"; } > >(tee "$logfile") 2>&1 || rc=$?
   wait
   log "=== ${label} done (exit ${rc}) ==="
-  return 0
+  return "$rc"
 }

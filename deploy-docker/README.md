@@ -42,9 +42,15 @@ WAZUH_DEPLOY=docker vagrant up wazuh-server
 
 - **Indexer exits immediately** → `vm.max_map_count` too low. `up.sh` fixes this, but if you run
   compose by hand: `sudo sysctl -w vm.max_map_count=262144`.
-- **Certificates** — the official single-node repo ships a `generate-certs.yml`. If you hit TLS
-  errors, clone `github.com/wazuh/wazuh-docker` (branch `v4.14.0`), run its cert generator, and
-  copy the resulting `config/wazuh_indexer_ssl_certs/` next to this compose file.
+- **Certificates + config** — this compose file mounts the official single-node config tree, so
+  before the first `./up.sh` you must clone `github.com/wazuh/wazuh-docker` (branch `v4.14.0`),
+  run its cert generator, and copy the whole `single-node/config/*` into `deploy-docker/config/`
+  (certs, `wazuh_indexer/`, `wazuh_dashboard/`). `up.sh` checks for all three and tells you if
+  any are missing.
+- **Indexer password** — the indexer's real admin password is the bcrypt hash in
+  `config/wazuh_indexer/internal_users.yml`; `INDEXER_PASSWORD` in `.env` is only what the manager
+  and dashboard *present* when connecting. They have to match, or the dashboard shows an
+  authentication error. `up.sh` prints the `hash.sh` command for generating the hash.
 - **Port 443 clash** — if the host already serves something on 443, change the dashboard mapping.
 - **Agents still install natively.** The agents on `monitored` and `client` are unchanged; they
   just point at `192.168.56.40:1514` as before.

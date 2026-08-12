@@ -252,7 +252,9 @@ vagrant provision monitored
 The provisioner:
 
 1. Installs Suricata
-2. Sets `HOME_NET` to `192.168.56.0/24` (so it knows what "inside" means)
+2. Sets `HOME_NET` to the protected hosts `[.20, .30, .40]` — deliberately **not**
+   the whole `/24`, because `EXTERNAL_NET` is `!$HOME_NET` and Kali (`.10`) has to
+   stay outside it or no `$EXTERNAL_NET -> $HOME_NET` rule can ever match
 3. Points it at the correct network interface (auto-detected)
 4. Installs our custom rules and **merges them** with `suricata-update --local`
 5. **Verifies the merge worked** and shouts if it didn't

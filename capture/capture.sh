@@ -28,6 +28,9 @@ else
   sudo tshark -i "$IFACE" -a duration:"$DURATION" -w "$OUT"
 fi
 
-sudo chmod 644 "$OUT"
+# Best effort: /vagrant is a VirtualBox shared folder, which does not support
+# chmod. Under `set -e` a failure here would abort AFTER a successful capture
+# and swallow the "where is my file" message, which is the worst moment to die.
+sudo chmod 644 "$OUT" 2>/dev/null || true
 echo "[capture] saved: ${OUT}  ($(du -h "$OUT" | cut -f1))"
 echo "[capture] analyse with: bash /vagrant/capture/analyze.sh ${OUT}"

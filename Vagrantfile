@@ -9,10 +9,12 @@
 #   Client Zone      -> client        (.30)  machines sending logs to Wazuh
 #   Attack/Test Zone -> kali          (.10)  penetration testing / simulation
 #
-# All zones sit on one private host-only network (192.168.56.0/24). Zone
-# SEPARATION is enforced at the host firewall (scripts/harden-dashboard.sh),
-# not by separate subnets — a deliberate, documented simplification for a
-# single-laptop lab. See docs/architecture.md "Zone model".
+# All zones sit on one private host-only network (192.168.56.0/24) — a
+# deliberate, documented simplification for a single-laptop lab. Zone
+# boundaries are therefore enforced by SERVICE EXPOSURE + AUTHENTICATION
+# (scripts/harden-dashboard.sh: default-deny inbound, indexer never exposed,
+# dashboard/API answer 401 to unauthenticated callers), not by routing between
+# separate subnets. See docs/architecture.md "Zone model".
 #
 # Usage:
 #   vagrant up                       # all VMs

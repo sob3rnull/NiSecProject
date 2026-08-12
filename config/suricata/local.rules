@@ -1,6 +1,12 @@
 # local.rules — custom Suricata signatures for the NISec lab.
 # SIDs use the local range 9000000+ to avoid clashing with ET Open.
 # Reload after changes: sudo suricata-update && sudo systemctl restart suricata
+#
+# DEPENDENCY — every rule below is written `$EXTERNAL_NET -> $HOME_NET`, and
+# suricata.yaml defines EXTERNAL_NET as "!$HOME_NET". So these rules only fire
+# while the attacker (Kali, 192.168.56.10) is OUTSIDE HOME_NET. provision/
+# monitored-server.sh sets HOME_NET to the protected hosts only for exactly
+# this reason — widening it back to 192.168.56.0/24 silently kills all three.
 
 # --- ICMP ping flood (DoS demo — hping3 --icmp --flood) ----------------
 # The stock ruleset often won't flag a plain ICMP flood, so we add a

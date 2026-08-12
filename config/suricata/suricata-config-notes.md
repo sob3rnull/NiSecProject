@@ -10,12 +10,18 @@
 # rather than ship a whole 2000-line file we patch these keys in place
 # (see provision/monitored-server.sh). If you edit by hand, mirror these.
 #
-# 1) Define our lab as HOME_NET so "inbound" is judged correctly:
+# 1) Define the PROTECTED HOSTS as HOME_NET so "inbound" is judged correctly:
 #
 #      vars:
 #        address-groups:
-#          HOME_NET: "[192.168.56.0/24]"
+#          HOME_NET: "[192.168.56.20,192.168.56.30,192.168.56.40]"
 #          EXTERNAL_NET: "!$HOME_NET"
+#
+#    NOTE: HOME_NET is the defended assets, NOT the whole 192.168.56.0/24.
+#    EXTERNAL_NET is defined as "!$HOME_NET", so putting the attacker
+#    (Kali, 192.168.56.10) inside HOME_NET would make EXTERNAL_NET exclude it
+#    and every `$EXTERNAL_NET -> $HOME_NET` rule — ours and ET Open's — would
+#    silently never fire. Keep the Attack/Test zone outside HOME_NET.
 #
 # 2) Sniff the host-only interface (auto-detected; usually eth1):
 #

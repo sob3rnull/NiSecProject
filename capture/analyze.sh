@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # analyze.sh <file.pcap> — quick text summary of a capture, for the report.
-set -euo pipefail
+#
+# NOTE: no `pipefail` here, on purpose. Every section below ends in `| head -N`,
+# and head exits as soon as it has its lines — which SIGPIPEs tshark. With
+# pipefail that non-zero status combines with `set -e` and kills the script
+# part-way through the report, on exactly the large captures worth analysing.
+set -eu
 PCAP="${1:?usage: analyze.sh <file.pcap>}"
 [ -f "$PCAP" ] || { echo "no such file: $PCAP" >&2; exit 1; }
 

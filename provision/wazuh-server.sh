@@ -30,7 +30,10 @@ case "$WAZUH_DEPLOY" in
       echo "[wazuh-server] Wazuh already installed — skipping installer."
     else
       cd /root 2>/dev/null || cd /home/vagrant
-      sudo curl -sO "https://packages.wazuh.com/${WAZUH_VERSION}/wazuh-install.sh"
+      # -f is essential: without it a 404 (e.g. a bad WAZUH_VERSION) is saved
+      # as wazuh-install.sh and then executed as a shell script.
+      sudo curl -fsSL -o wazuh-install.sh \
+        "https://packages.wazuh.com/${WAZUH_VERSION}/wazuh-install.sh"
       # -a = all-in-one; -i = ignore hardware checks (labs are small)
       sudo bash ./wazuh-install.sh -a -i
       echo "[wazuh-server] ---------------------------------------------------------"
@@ -56,9 +59,15 @@ if [ "$WAZUH_DEPLOY" != "docker" ] && [ -d /vagrant/config/wazuh-manager ]; then
 fi
 
 # --- log retention (proposal: "store logs so they can be reviewed later") ---
-if [ -x /vagrant/scripts/configure-retention.sh ]; then
-  sudo bash /vagrant/scripts/configure-retention.sh || \
-    echo "[wazuh-server] retention config skipped (indexer not ready yet)"
+# Provisioning has no way to know the generated admin password, and the script
+# deliberately refuses to guess one — so this is expected to be a no-op here.
+# Say so accurately rather than blaming the indexer for a missing credential.
+if [ -x /vagrant/scripts/configure-retention.sh ] && [ -n "${INDEXER_PASS:-}" ]; then
+  sudo INDEXER_PASS="${INDEXER_PASS}" bash /vagrant/scripts/configure-retention.sh || \
+    echo "[wazuh-server] retention config failed — re-run: make retention INDEXER_PASS=..."
+else
+  echo "[wazuh-server] retention NOT applied (needs the admin password)."
+  echo "[wazuh-server]   run later: make retention INDEXER_PASS='<admin password>'"
 fi
 
 # --- access control hardening (proposal NFR: only authorised users) ---

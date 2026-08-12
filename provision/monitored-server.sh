@@ -24,10 +24,22 @@ IFACE="$(ip -o -4 addr show | awk '/192\.168\.56\./{print $2; exit}')"
 IFACE="${IFACE:-eth1}"
 echo "[monitored] Suricata will listen on ${IFACE}"
 
-sudo cp /etc/suricata/suricata.yaml "/etc/suricata/suricata.yaml.orig.$(date +%s)" 2>/dev/null || true
+# Back up the genuinely-original yaml ONCE. Re-provisioning used to drop a new
+# timestamped ".orig" every run, each a copy of the already-patched file.
+if ! sudo test -f /etc/suricata/suricata.yaml.nisec-orig; then
+  sudo cp /etc/suricata/suricata.yaml /etc/suricata/suricata.yaml.nisec-orig 2>/dev/null || true
+fi
 
-# HOME_NET: scope our lab so "inbound from EXTERNAL_NET" is judged correctly.
-sudo sed -i "s#^\( *HOME_NET:\).*#\1 \"[192.168.56.0/24]\"#" /etc/suricata/suricata.yaml || true
+# HOME_NET: the PROTECTED hosts only — deliberately NOT the whole 192.168.56.0/24.
+# Stock suricata.yaml defines EXTERNAL_NET as "!$HOME_NET". Every attack in this
+# lab originates from Kali (192.168.56.10), so if HOME_NET covered the whole /24
+# then Kali would be "internal", EXTERNAL_NET would exclude it, and every rule
+# written as `$EXTERNAL_NET -> $HOME_NET` — our SIDs 9000001-9000003 AND most of
+# the ET Open ruleset — could never match. Listing just the assets we defend
+# keeps the attacker external and the zone model honest.
+HOME_NET="[${MONITORED_IP:-192.168.56.20},${CLIENT_IP:-192.168.56.30},${WAZUH_SERVER_IP:-192.168.56.40}]"
+echo "[monitored] Suricata HOME_NET = ${HOME_NET} (attacker zone stays EXTERNAL)"
+sudo sed -i "s#^\( *HOME_NET:\).*#\1 \"${HOME_NET}\"#" /etc/suricata/suricata.yaml || true
 
 # Interface: only rewrite the FIRST '- interface:' occurrence, which belongs to
 # the af-packet block. suricata.yaml also has '- interface:' under pcap/netmap/

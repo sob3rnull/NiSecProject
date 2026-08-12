@@ -5,11 +5,13 @@
 # Sets an Index State Management (ISM) policy on the Wazuh indexer so alert
 # indices age out predictably instead of silently filling the disk.
 #
-# Lifecycle: hot (7d) -> read-only (30d) -> deleted (90d)
+# Lifecycle: hot (0-30d) -> read-only (30-90d) -> deleted (90d+)
 set -uo pipefail
 
 INDEXER="${INDEXER:-https://localhost:9200}"
-USER="${INDEXER_USER:-admin}"
+# Not named USER: that is the login name every shell exports, and clobbering it
+# leaks a bogus username into everything this script starts.
+INDEXER_ADMIN="${INDEXER_USER:-admin}"
 PASS="${INDEXER_PASS:-}"
 
 if [ -z "$PASS" ]; then
@@ -32,8 +34,9 @@ fi
 # correct mechanism for date-named indices.
 echo "=== NISec log retention policy ==="
 
-if ! curl -sk -u "${USER}:${PASS}" -o /dev/null "${INDEXER}"; then
-  echo "indexer not reachable at ${INDEXER} — run this after Wazuh is up." >&2
+if ! curl -fsk -u "${INDEXER_ADMIN}:${PASS}" -o /dev/null "${INDEXER}"; then
+  echo "indexer not reachable (or credentials rejected) at ${INDEXER}." >&2
+  echo "Run this after Wazuh is up, with the real admin password:" >&2
   echo "  INDEXER_PASS=yourpass bash scripts/configure-retention.sh" >&2
   exit 1
 fi
@@ -68,23 +71,33 @@ read -r -d '' POLICY <<'JSON' || true
 JSON
 
 echo "[1/2] applying ISM policy 'nisec-retention'..."
-curl -sk -u "${USER}:${PASS}" -X PUT \
+curl -sk -u "${INDEXER_ADMIN}:${PASS}" -X PUT \
   "${INDEXER}/_plugins/_ism/policies/nisec-retention" \
   -H 'Content-Type: application/json' -d "$POLICY" | head -5
 
 echo
 echo "[2/2] verifying..."
-curl -sk -u "${USER}:${PASS}" \
-  "${INDEXER}/_plugins/_ism/policies/nisec-retention" >/dev/null 2>&1 \
-  && echo "  policy stored OK" || echo "  could not verify — check credentials"
+# -f matters here: without it curl exits 0 on a 404/401 body, so this check
+# would print "policy stored OK" even when the PUT never landed.
+if curl -fsk -u "${INDEXER_ADMIN}:${PASS}" \
+     "${INDEXER}/_plugins/_ism/policies/nisec-retention" >/dev/null 2>&1; then
+  echo "  policy stored OK"
+else
+  echo "  VERIFICATION FAILED — policy not readable back. Check credentials," >&2
+  echo "  and re-run; the retention requirement is NOT satisfied yet." >&2
+  exit 1
+fi
 
 cat <<'MSG'
 
-Retention summary for your report:
-  0-7d    hot        actively written, fully searchable
-  7-30d   warm       searchable, rolled over
+Retention summary for your report (this is what the policy above actually does):
+  0-30d   hot        actively written, fully searchable
   30-90d  read-only  searchable, immutable (tamper evidence)
   90d+    deleted    reclaimed
+
+Wazuh writes one index per day (wazuh-alerts-4.x-YYYY.MM.DD), so indices roll
+daily by name — there is no separate "warm"/rollover stage, by design (see the
+note above the policy).
 
 Disk-planning note: this lab generates roughly 50-200 MB of alerts per day
 under active testing. 90 days therefore needs ~5-18 GB. State your own

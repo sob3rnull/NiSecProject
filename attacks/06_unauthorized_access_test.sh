@@ -3,25 +3,25 @@
 # and the NFR "only authorized users should be able to access the dashboard".
 #
 # Run from KALI. All of these SHOULD FAIL — failure is the successful result.
-source "$(dirname "$0")/_lib.sh"
+source "$(dirname "$0")/_lib.sh"   # WAZUH_SERVER + LOGDIR + helpers live there
 
-WAZUH_SERVER="${WAZUH_SERVER:-192.168.56.40}"
-
+# Every curl below carries -m: a firewalled port DROPs rather than refuses, so
+# without a timeout these tests hang for minutes instead of reporting a result.
 log "TEST 1/3 — anonymous access to the Wazuh API (should be 401)"
-run_logged "unauth_api" curl -sk -o /dev/null -w 'HTTP %{http_code}\n' \
+run_logged "unauth_api" curl -sk -m 5 -o /dev/null -w 'HTTP %{http_code}\n' \
   "https://${WAZUH_SERVER}:55000/agents" || true
 log "  -> 401 Unauthorized = access control working"
 
 log "TEST 2/3 — default/guessed dashboard credentials (should all fail)"
 # Logged to a file like the other tests: this is evidence you need to
 # screenshot/cite, so it must not exist only in terminal scrollback.
-CREDLOG="${LOGDIR}/default_creds_$(date +%Y%m%d_%H%M%S).log"
+CREDLOG="$(log_path default_creds)"
 {
   echo "# $(_ts)  default-credential check against ${WAZUH_SERVER}"
   for creds in "admin:admin" "admin:password" "wazuh:wazuh" "admin:changeme"; do
-    code="$(curl -sk -o /dev/null -w '%{http_code}' -u "$creds" \
+    code="$(curl -sk -m 5 -o /dev/null -w '%{http_code}' -u "$creds" \
       "https://${WAZUH_SERVER}:55000/security/user/authenticate" || true)"
-    echo "  ${creds} -> HTTP ${code}"
+    echo "  ${creds} -> HTTP ${code:-timeout}"
   done
 } 2>&1 | tee "$CREDLOG"
 log "  saved: ${CREDLOG}"

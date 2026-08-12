@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# _ossec-merge.sh — helper: insert an <ossec_config> snippet into ossec.conf
-# once, before the final closing tag. Sourced by the role scripts.
+# _ossec-merge.sh — helper: append an <ossec_config> snippet to ossec.conf
+# once, AFTER the last </ossec_config> close tag. ossec.conf is a sequence of
+# top-level <ossec_config> blocks, so each snippet becomes its own block.
+# Sourced by the role scripts.
 set -euo pipefail
 
 # merge_ossec_snippet <snippet-file> <unique-grep-marker>

@@ -5,7 +5,7 @@ SHELL := /bin/bash
         healthcheck harden retention attacks malware-test capture dvwa ssh-%
 
 help:  ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+	@grep -E '^[a-zA-Z_%-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 up:            ## Bring up the full 4-VM lab (installer deployment)
@@ -38,8 +38,15 @@ healthcheck:   ## Check connectivity + services across the lab
 harden:        ## Apply dashboard access-control hardening
 	vagrant ssh wazuh-server -c 'sudo bash /vagrant/scripts/harden-dashboard.sh'
 
-retention:     ## Apply the 90-day log retention policy
-	vagrant ssh wazuh-server -c 'sudo bash /vagrant/scripts/configure-retention.sh'
+retention:     ## Apply the 90-day log retention policy (INDEXER_PASS=... required)
+	@test -n "$(INDEXER_PASS)" || { \
+	  echo "usage: make retention INDEXER_PASS='<wazuh admin password>'"; \
+	  echo "  the script refuses to guess a password, so it must be passed through."; \
+	  echo "  find it with: make ssh-wazuh-server, then"; \
+	  echo "  sudo tar -O -xf wazuh-install-files.tar \\"; \
+	  echo "    wazuh-install-files/wazuh-passwords.txt | grep -A1 admin"; \
+	  exit 1; }
+	vagrant ssh wazuh-server -c 'sudo INDEXER_PASS="$(INDEXER_PASS)" bash /vagrant/scripts/configure-retention.sh'
 
 attacks:       ## Run the detection test suite from Kali
 	vagrant ssh kali -c 'cd /vagrant/attacks && ./run_all.sh'

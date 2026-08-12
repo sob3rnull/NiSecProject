@@ -20,15 +20,22 @@ if command -v ufw >/dev/null 2>&1; then
   sudo ufw allow from 192.168.56.0/24 to any port 1514 proto tcp comment 'agent data'
   sudo ufw allow from 192.168.56.0/24 to any port 1515 proto tcp comment 'agent enrol'
 
-  # Management zone only -> dashboard + API.
-  # NOTE: tighten this to your host's IP for a stricter demo, e.g. 192.168.56.1
+  # Dashboard + API. NOTE: this is the whole lab subnet, INCLUDING the attack
+  # zone — deliberately, because 06_unauthorized_access_test.sh has to reach
+  # these ports to prove they answer 401. That means the firewall is not by
+  # itself the zone boundary here; authentication is. Tighten to the management
+  # host (e.g. 192.168.56.1) for a stricter demo, at the cost of that test
+  # hanging on a dropped packet instead of returning 401.
   sudo ufw allow from 192.168.56.0/24 to any port 443   proto tcp comment 'dashboard'
   sudo ufw allow from 192.168.56.0/24 to any port 55000 proto tcp comment 'wazuh api'
 
   # SSH for admin (vagrant needs this)
   sudo ufw allow 22/tcp comment 'ssh admin'
 
-  # The indexer must NOT be reachable from the client/attack zones
+  # The indexer must NOT be reachable from the client/attack zones.
+  # CAVEAT: this only covers the installer deployment. Docker publishes ports
+  # via its own iptables chain, which ufw does not filter — the compose file
+  # therefore binds 9200 to 127.0.0.1 rather than relying on this rule.
   sudo ufw deny 9200/tcp comment 'indexer - localhost only'
 
   sudo ufw --force enable
@@ -60,12 +67,38 @@ MSG
 # --- 4. Session timeout ----------------------------------------------------
 echo "[4/4] dashboard session timeout..."
 DASH_CONF=/etc/wazuh-dashboard/opensearch_dashboards.yml
+# The session lifetime lives in the security plugin's namespace. There is no
+# `opensearchDashboards.sessionTimeout` key — OpenSearch Dashboards validates
+# its config strictly and refuses to start on an unknown key, so writing the
+# wrong name here takes the dashboard down instead of hardening it.
+TIMEOUT_KEY="opensearch_security.session.ttl"
 if sudo test -f "$DASH_CONF"; then
-  if ! sudo grep -q "opensearchDashboards.sessionTimeout" "$DASH_CONF" 2>/dev/null; then
-    # 30 minutes, in ms
-    echo 'opensearchDashboards.sessionTimeout: 1800000' | sudo tee -a "$DASH_CONF" >/dev/null
-    sudo systemctl restart wazuh-dashboard 2>/dev/null || true
-    echo "  set 30-minute idle timeout"
+  # Earlier versions of this script appended a key that does not exist. Strip
+  # it, or the dashboard stays broken no matter what we add below.
+  if sudo grep -q "^opensearchDashboards.sessionTimeout" "$DASH_CONF" 2>/dev/null; then
+    echo "  removing invalid opensearchDashboards.sessionTimeout left by an earlier run"
+    sudo sed -i '/^opensearchDashboards.sessionTimeout/d' "$DASH_CONF"
+    sudo systemctl restart wazuh-dashboard >/dev/null 2>&1 || true
+  fi
+  if ! sudo grep -q "^${TIMEOUT_KEY}" "$DASH_CONF" 2>/dev/null; then
+    sudo cp "$DASH_CONF" "${DASH_CONF}.nisec-bak"
+    # 30 minutes, in ms. Leading newline in case the file lacks a trailing one.
+    printf '\n%s: 1800000\nopensearch_security.cookie.ttl: 1800000\n' "$TIMEOUT_KEY" \
+      | sudo tee -a "$DASH_CONF" >/dev/null
+
+    # Verify rather than assume: a config the dashboard rejects is worse than
+    # no timeout at all, so roll back if the service does not come back up.
+    sudo systemctl restart wazuh-dashboard >/dev/null 2>&1 || true
+    sleep 5
+    if sudo systemctl is-active --quiet wazuh-dashboard; then
+      echo "  set 30-minute idle timeout"
+      sudo rm -f "${DASH_CONF}.nisec-bak"
+    else
+      echo "  WARNING: dashboard did not come back up — reverting the timeout" >&2
+      sudo mv "${DASH_CONF}.nisec-bak" "$DASH_CONF"
+      sudo systemctl restart wazuh-dashboard >/dev/null 2>&1 || true
+      echo "  reverted. Check: sudo journalctl -u wazuh-dashboard -n 50" >&2
+    fi
   else
     echo "  timeout already configured"
   fi

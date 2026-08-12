@@ -17,6 +17,12 @@ declare -a RESULTS=()
 
 run_step() {
   local name="$1" script="$2"
+  # Pause BETWEEN steps, not after the last one — trailing sleep just makes
+  # the suite look hung once all the evidence is already collected.
+  if [ "${#RESULTS[@]}" -gt 0 ]; then
+    log "sleeping ${PAUSE}s so alerts settle on the dashboard..."
+    sleep "$PAUSE"
+  fi
   log ""
   log "----- ${name} -----"
   if bash "${here}/${script}"; then
@@ -25,8 +31,6 @@ run_step() {
     # Non-zero is common and usually expected here; record, don't abort.
     RESULTS+=("done  ${name} (tool exited non-zero - normal for this test)")
   fi
-  log "sleeping ${PAUSE}s so alerts settle on the dashboard..."
-  sleep "$PAUSE"
 }
 
 log "############################################################"
@@ -40,12 +44,12 @@ run_step "2. SSH brute-force"          02_ssh_bruteforce.sh
 run_step "3. Ping flood (DoS)"         03_ping_flood.sh
 
 # --- Access control test (from Kali, against the Wazuh server) ----------
-run_step "5. Unauthorized access"      06_unauthorized_access_test.sh
+run_step "4. Unauthorized access"      06_unauthorized_access_test.sh
 
 # --- Bonus: web attack (only if DVWA is up) -----------------------------
 if [ "$BONUS" = "true" ]; then
   log "BONUS: web attack (beyond submitted scope)"
-  run_step "7. Web attack (bonus)"     04_web_attack.sh
+  run_step "5. Web attack (bonus)"     04_web_attack.sh
 else
   log "skipping web attack (bonus). Enable with: BONUS=true ./run_all.sh"
 fi
