@@ -37,6 +37,13 @@ NODES = {
                      "provision/kali.sh",             "Attack/Test"],
 }
 
+SSH_PORTS = {
+  "wazuh-server" => 25022,
+  "monitored"    => 25023,
+  "client"       => 25024,
+  "kali"         => 25025,
+}
+
 Vagrant.configure("2") do |config|
   config.vm.boot_timeout = 600
 
@@ -47,6 +54,11 @@ Vagrant.configure("2") do |config|
       node.vm.box      = box
       node.vm.hostname = name
       node.vm.network "private_network", ip: ip
+
+      node.vm.network "forwarded_port",
+        guest: 22,
+        host: SSH_PORTS[name],
+        id: "ssh"
 
       node.vm.provider "virtualbox" do |vb|
         # zone may contain "/" (Attack/Test); VirtualBox uses the VM name as a
