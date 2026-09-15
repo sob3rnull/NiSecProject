@@ -25,7 +25,11 @@ you view from a single dashboard.
 | Show coverage against a framework | [`docs/attack-mapping.md`](docs/attack-mapping.md) |
 | Cite something | [`docs/references.md`](docs/references.md) |
 
-**Quickest path:** `make up` → wait → `make healthcheck` → `make test` → `make measure`.
+**Quickest path on Windows:** `.\nisec.ps1 up` -> wait -> `.\nisec.ps1 healthcheck` ->
+`.\nisec.ps1 test` -> `.\nisec.ps1 measure`.
+
+**Quickest path with make/Git Bash:** `make up` -> wait -> `make healthcheck` ->
+`make test` -> `make measure`.
 
 ---
 
@@ -46,43 +50,49 @@ All four sit on one private host-only network — attacks never leave the lab.
 
 Requires **VirtualBox** + **Vagrant** on your host.
 
-```bash
-make up                  # build the lab (4 VMs; ~30-60 min on first run)
-make up-budget           # 3 VMs instead, for 8 GB hosts
-make healthcheck         # verify every service across the lab
+```powershell
+.\nisec.ps1 up             # build the lab (4 VMs; ~30-60 min on first run)
+.\nisec.ps1 up-budget      # 3 VMs instead, for 8 GB hosts
+.\nisec.ps1 healthcheck    # verify every service across the lab
 ```
 
-> **On Windows:** `make` is not installed by default, so none of the commands in this
-> repo will run until you have it. Either install it —
-> `choco install make` or `scoop install make`, then use Git Bash — or skip `make`
-> entirely and run the underlying command, which is always in the Makefile:
+> **Windows command rule:** use `nisec.ps1` from PowerShell. It wraps Vagrant and automatically
+> uses Git Bash for the host-side shell scripts, avoiding the common WSL `bash` failure.
 >
-> ```bash
-> vagrant up                          # instead of: make up
-> bash scripts/healthcheck.sh         # instead of: make healthcheck
-> bash scripts/measure-detection.sh   # instead of: make measure
+> ```powershell
+> Set-ExecutionPolicy -Scope Process Bypass
+> .\nisec.ps1 status
+> .\nisec.ps1 healthcheck
 > ```
 >
-> Everything else assumes Git Bash rather than PowerShell — the scripts are POSIX shell.
+> `make` still works if you run it from Git Bash or a correctly configured shell, but plain
+> PowerShell may pick up WSL's `bash.exe` and fail on targets such as `healthcheck`, `test`,
+> `measure`, and `seal`.
 
 Get your dashboard password (randomly generated at install):
 
+```powershell
+.\nisec.ps1 ssh-wazuh-server
+```
+
+Then inside the VM:
+
 ```bash
-vagrant ssh wazuh-server
 sudo tar -O -xf wazuh-install-files.tar wazuh-install-files/wazuh-passwords.txt | grep -A1 admin
 ```
 
 Then browse **https://192.168.56.40** and accept the self-signed certificate.
 
-```bash
-make harden              # access control (proposal NFR)
-make retention           # 90-day log lifecycle (proposal FR)
-make attacks             # run the detection suite from Kali
-make malware-test        # FIM / ransomware test (on the monitored server)
-make capture             # 60s packet capture for Wireshark evidence
+```powershell
+.\nisec.ps1 harden          # access control (proposal NFR)
+.\nisec.ps1 retention -IndexerPass '<admin password>'
+.\nisec.ps1 attacks         # run the detection suite from Kali
+.\nisec.ps1 malware-test    # FIM / ransomware test (on the monitored server)
+.\nisec.ps1 capture         # 60s packet capture for Wireshark evidence
 ```
 
-Run `make help` for every target.
+Run `.\nisec.ps1 help` to print the available PowerShell targets, or `make help` if you are
+using Make.
 
 ---
 
@@ -92,25 +102,25 @@ Building the lab is not the project — **producing defensible results is**. Fou
 targets take you from "it runs" to "here are the numbers, and here is why you
 can trust them":
 
-```bash
-make test        # 1. Do the rules match the traffic they claim to? (offline, no lab traffic needed)
-make measure     # 2. Detection rate, which rule fired, time-to-alert -> evidence/*.md
-make evasion     # 3. Where does detection STOP working? (misses are the result)
-make seal        # 4. Hash the evidence so you can prove it didn't change
+```powershell
+.\nisec.ps1 test       # 1. Do the rules match the traffic they claim to? (offline, no lab traffic needed)
+.\nisec.ps1 measure    # 2. Detection rate, which rule fired, time-to-alert -> evidence/*.md
+.\nisec.ps1 evasion    # 3. Where does detection STOP working? (misses are the result)
+.\nisec.ps1 seal       # 4. Hash the evidence so you can prove it didn't change
 ```
 
-**`make test`** replays a synthetic pcap through Suricata offline and asserts each
+**`.\nisec.ps1 test` / `make test`** replays a synthetic pcap through Suricata offline and asserts each
 custom SID fires. Run it first whenever a live attack produces no alert: if the
 rules pass here, the fault is in the pipeline, not the signatures — that one
 distinction saves hours of blind debugging.
 
-**`make measure`** is the instrument this project needs to make a quantitative
+**`.\nisec.ps1 measure` / `make measure`** is the instrument this project needs to make a quantitative
 claim. It reads every timestamp from the Wazuh manager's own clock, so VM skew
 cannot contaminate the latency, records a `NOT DETECTED` row when nothing fires,
 and measures an idle baseline so "we saw N alerts" can be read against the noise
 floor. It writes a markdown table straight into `evidence/`.
 
-**`make evasion`** is the one that separates a good project from a working one.
+**`.\nisec.ps1 evasion` / `make evasion`** is the one that separates a good project from a working one.
 It deliberately stays under each threshold — slow scan, decoy sources,
 fragmentation, throttled brute-force, encrypted payload. Most of it is *expected
 not to alert*. The headline result: a slow SSH brute-force slips past the network
@@ -118,7 +128,7 @@ signature while Wazuh's host rules catch it anyway, because they count failed
 logins rather than packets. That is the empirical argument for running Suricata
 **and** Wazuh — have it ready before anyone asks why one sensor wasn't enough.
 
-Optionally, `make active-response` closes the loop from detect to respond. It is
+Optionally, `.\nisec.ps1 active-response` / `make active-response` closes the loop from detect to respond. It is
 opt-in by design: it writes firewall DROP rules from log events, so enable it
 deliberately and only after your detection evidence is captured.
 
@@ -154,9 +164,9 @@ for the two-tool design.
 Your proposal states the Ubuntu server *"runs Docker containers for easier deployment."* Both paths
 are provided:
 
-```bash
-make up                                        # all-in-one installer (default, recommended)
-WAZUH_DEPLOY=docker vagrant up wazuh-server    # containerised Wazuh stack
+```powershell
+.\nisec.ps1 up                                  # all-in-one installer (default, recommended)
+.\nisec.ps1 up-docker                           # containerised Wazuh stack
 ```
 
 Build with the installer first and capture a clean detection. Only try Docker once your results are
@@ -171,6 +181,7 @@ ready-made viva answer covering both.
 nisec-lab/
 ├── Vagrantfile              # 4 VMs mapped to the 4 security zones
 ├── Makefile                 # make up / healthcheck / attacks / ...
+├── nisec.ps1                # PowerShell wrapper for Windows
 ├── provision/               # per-VM setup scripts (idempotent bash)
 ├── deploy-docker/           # ALT: containerised Wazuh stack
 ├── config/
@@ -210,11 +221,14 @@ Both are now checked automatically:
 
 - **Custom Suricata rules not loading.** Copying a `.rules` file next to the ruleset doesn't load
   it; `suricata-update` regenerates that directory. The provisioner uses `suricata-update --local`
-  and then verifies the SIDs landed in the compiled ruleset. `make healthcheck` re-checks it.
+  and then verifies the SIDs landed in the compiled ruleset. `.\nisec.ps1 healthcheck` and
+  `make healthcheck` re-check it.
 - **The test suite stopping early.** Several tools exit non-zero on their *expected* outcome (hydra
   finding no password). The runner records each result and continues, then prints a summary.
 
-If `make healthcheck` is all green, the lab is genuinely working — not just running.
+If `.\nisec.ps1 healthcheck` / `make healthcheck` is green, the lab is genuinely working — not
+just running. In budget mode, the `client` checks are expected to fail because that VM is off.
+DVWA is optional and only needs to be green if you are doing the bonus web attack.
 
 ---
 

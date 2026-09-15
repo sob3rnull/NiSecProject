@@ -53,7 +53,7 @@ fi
 # Loaded is not the same as able to match. Our rules are $EXTERNAL_NET ->
 # $HOME_NET and EXTERNAL_NET is "!$HOME_NET", so if HOME_NET ever swallows the
 # attacker's IP the rules load fine and then never fire.
-if vssh monitored "grep -E '^ *HOME_NET:' /etc/suricata/suricata.yaml" | grep -q '192.168.56.10'; then
+if vssh monitored "sudo grep -E '^ *HOME_NET:' /etc/suricata/suricata.yaml" | grep -q '192.168.56.10'; then
   bad "HOME_NET contains the attacker (.10) - EXTERNAL_NET rules can never match"
 else
   ok "HOME_NET excludes the attack zone (rules can match)"

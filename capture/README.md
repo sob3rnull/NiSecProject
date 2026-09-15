@@ -20,6 +20,14 @@ the screenshots.
 
 ## Usage
 
+From the Windows host, the convenience wrapper starts a standard 60-second capture:
+
+```powershell
+.\nisec.ps1 capture
+```
+
+For custom durations or filters, run the capture command inside the monitored VM:
+
 ```bash
 # On the monitored server — capture while you attack from Kali
 sudo bash /vagrant/capture/capture.sh 60          # capture 60 seconds

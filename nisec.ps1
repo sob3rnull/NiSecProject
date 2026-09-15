@@ -14,7 +14,50 @@ param(
     [string]$IndexerPass
 )
 
+function Get-GitBash {
+    $candidates = @(
+        "C:\Program Files\Git\bin\bash.exe",
+        "C:\Program Files\Git\usr\bin\bash.exe",
+        "${env:ProgramFiles}\Git\bin\bash.exe",
+        "${env:ProgramFiles}\Git\usr\bin\bash.exe",
+        "${env:LocalAppData}\Programs\Git\bin\bash.exe"
+    )
+
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Invoke-HostBashScript {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ScriptPath
+    )
+
+    $bash = Get-GitBash
+    if (-not $bash) {
+        Write-Host "Git Bash was not found. Install Git for Windows or add Git Bash to PATH."
+        Write-Host "Then run this target again from the nisec-lab folder."
+        exit 1
+    }
+
+    & $bash $ScriptPath
+    exit $LASTEXITCODE
+}
+
+function Show-Help {
+    Write-Host "Available PowerShell targets:"
+    Write-Host "  up, up-budget, up-docker, halt, destroy, status, reload, provision,"
+    Write-Host "  healthcheck, test, measure, seal, harden, retention, attacks,"
+    Write-Host "  malware-test, evasion, active-response, capture, dvwa, ssh-<vmname>"
+}
+
 switch -Regex ($Target) {
+    "^help$"          { Show-Help }
     "^up$"            { vagrant up }
     "^up-budget$"     { $env:CLIENT_ENABLED = "false"; vagrant up }
     "^up-docker$"     { $env:WAZUH_DEPLOY   = "docker"; vagrant up }
@@ -51,28 +94,17 @@ switch -Regex ($Target) {
     }
 
     "^(healthcheck|test|measure|seal)$" {
-        Write-Host "'$Target' runs a POSIX shell script on the HOST (not inside a VM)."
-        Write-Host "PowerShell can't run these. Open Git Bash instead and run:"
         switch ($Target) {
-            "healthcheck" { Write-Host "  bash scripts/healthcheck.sh" }
-            "test"        { Write-Host "  bash tests/test-rules.sh" }
-            "measure"     { Write-Host "  bash scripts/measure-detection.sh" }
-            "seal"        { Write-Host "  bash scripts/seal-evidence.sh" }
+            "healthcheck" { Invoke-HostBashScript "scripts/healthcheck.sh" }
+            "test"        { Invoke-HostBashScript "tests/test-rules.sh" }
+            "measure"     { Invoke-HostBashScript "scripts/measure-detection.sh" }
+            "seal"        { Invoke-HostBashScript "scripts/seal-evidence.sh" }
         }
-        Write-Host ""
-        Write-Host "Git Bash ships with Git for Windows, which you already have (you used it to clone this repo)."
-        Write-Host "Right-click the nisec-lab folder in Explorer -> 'Git Bash Here', or search 'Git Bash' in Start."
     }
 
     default {
         Write-Host "Unknown target: $Target"
         Write-Host ""
-        Write-Host "Available (PowerShell-native):"
-        Write-Host "  up, up-budget, up-docker, halt, destroy, status, reload, provision,"
-        Write-Host "  harden, retention, attacks, malware-test, evasion, active-response,"
-        Write-Host "  capture, dvwa, ssh-<vmname>"
-        Write-Host ""
-        Write-Host "Need Git Bash instead:"
-        Write-Host "  healthcheck, test, measure, seal"
+        Show-Help
     }
 }

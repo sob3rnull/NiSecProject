@@ -24,6 +24,14 @@ which is a stronger answer than only knowing one.
 
 ## Usage
 
+Recommended from the repo root on Windows:
+
+```powershell
+.\nisec.ps1 up-docker
+```
+
+Manual use inside the VM or from a Linux/Git Bash shell:
+
 ```bash
 cd deploy-docker
 cp .env.example .env      # then EDIT the passwords
@@ -33,6 +41,12 @@ cp .env.example .env      # then EDIT the passwords
 ```
 
 To use this instead of the installer when provisioning:
+
+```powershell
+.\nisec.ps1 up-docker
+```
+
+Equivalent without the PowerShell wrapper:
 
 ```bash
 WAZUH_DEPLOY=docker vagrant up wazuh-server

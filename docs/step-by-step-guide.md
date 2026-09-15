@@ -66,7 +66,8 @@ If it says virtualization is disabled, reboot into BIOS and enable it. Nothing w
 
 1. Install **VirtualBox** — https://www.virtualbox.org/wiki/Downloads
 2. Install **Vagrant** — https://developer.hashicorp.com/vagrant/downloads
-3. Open a terminal in the `nisec-lab` folder.
+3. On Windows, open **PowerShell** in the `nisec-lab` folder. On Linux/macOS or Git Bash, `make`
+   is also supported.
 
 ### ✅ Checkpoint
 
@@ -76,6 +77,12 @@ VBoxManage --version   # expect: 7.x
 ```
 
 Both must print a version. If `VBoxManage` isn't found, add VirtualBox's install folder to your PATH.
+
+On Windows, also confirm the wrapper runs:
+
+```powershell
+.\nisec.ps1 status
+```
 
 ### 🔧 If it breaks
 
@@ -103,9 +110,9 @@ This builds the four security zones from your proposal:
 
 ### Do this
 
-```bash
-make up            # 16 GB host — all four VMs
-make up-budget     # 8 GB host  — three VMs (drops the client)
+```powershell
+.\nisec.ps1 up            # 16 GB host - all four VMs
+.\nisec.ps1 up-budget     # 8 GB host  - three VMs (drops the client)
 ```
 
 First run downloads several GB of base images. Expect 30–60 minutes. It's normal for this to look
@@ -118,8 +125,8 @@ stalled while boxes download.
 
 ### ✅ Checkpoint
 
-```bash
-make status                                  # all VMs "running"
+```powershell
+.\nisec.ps1 status                           # all VMs "running"
 vagrant ssh kali -c "ping -c2 192.168.56.20" # attacker reaches target
 vagrant ssh kali -c "ping -c2 192.168.56.40" # attacker reaches server
 ```
@@ -128,7 +135,7 @@ All pings must succeed.
 
 ### 📸 Screenshot
 
-- `make status` output, or the VirtualBox window showing four VMs running → **report §5.1**
+- `.\nisec.ps1 status` output, or the VirtualBox window showing four VMs running → **report §5.1**
 
 ### 🔧 If it breaks
 
@@ -138,7 +145,7 @@ All pings must succeed.
 | `Vagrant was unable to mount VirtualBox shared folders` | Install the plugin: `vagrant plugin install vagrant-vbguest`, then `vagrant reload` |
 | Ping fails between VMs | Host-only adapter issue. In VirtualBox: File → Tools → Network Manager, confirm a `192.168.56.1/24` adapter exists with DHCP **off** |
 | "Address 192.168.56.x is not within the allowed ranges" | Create `/etc/vbox/networks.conf` (Linux/macOS) or `C:\ProgramData\VirtualBox\networks.conf` containing `* 192.168.56.0/21` |
-| Everything is unbearably slow | Not enough RAM. Use `make up-budget` |
+| Everything is unbearably slow | Not enough RAM. Use `.\nisec.ps1 up-budget` / `make up-budget` |
 
 ---
 
@@ -146,7 +153,7 @@ All pings must succeed.
 
 **Goal:** the control room — Manager (analyses), Indexer (stores/searches), Dashboard (you look at it).
 
-This happens automatically during `make up`, but it's the longest single step (~10–15 min) and
+This happens automatically during `.\nisec.ps1 up` / `make up`, but it's the longest single step (~10–15 min) and
 worth understanding.
 
 ### Do this
@@ -199,7 +206,7 @@ system *centralized* — the whole point of your project title.
 
 ### Do this
 
-Also automatic during `make up`. To re-run:
+Also automatic during `.\nisec.ps1 up` / `make up`. To re-run:
 
 ```bash
 vagrant provision monitored
@@ -278,7 +285,7 @@ ruleset does *not* load it — Suricata only reads what's listed in `rule-files:
 `suricata-update` regenerates that file. Without the merge, your **ping-flood detection will never
 fire** and nothing will tell you why.
 
-`make healthcheck` also reports this.
+`.\nisec.ps1 healthcheck` / `make healthcheck` also reports this.
 
 ### 📸 Screenshot
 
@@ -364,8 +371,8 @@ your write-up.
 
 ### Do this
 
-```bash
-make harden        # firewall rules, session timeout, credential guidance
+```powershell
+.\nisec.ps1 harden        # firewall rules, session timeout, credential guidance
 ```
 
 Then set retention — you must supply the password (the script refuses to guess a default):
@@ -423,8 +430,8 @@ vagrant ssh monitored -c "sudo bash /vagrant/capture/capture.sh 300"
 
 **Then run the suite** from Kali:
 
-```bash
-make attacks
+```powershell
+.\nisec.ps1 attacks
 ```
 
 It runs tests 1, 2, 3, 5 with pauses between each so alerts are easy to correlate, then prints a
@@ -433,8 +440,8 @@ which is exactly what you want.
 
 **Test 4 runs on the monitored server** (it simulates what an attacker does *after* landing):
 
-```bash
-make malware-test
+```powershell
+.\nisec.ps1 malware-test
 ```
 
 Safe by design: it uses the EICAR test string (a harmless industry-standard AV test file), creates
@@ -490,8 +497,13 @@ Beyond your submitted scope. Present as *additional work*, never as core scope.
 
 ### DVWA + web attack
 
+```powershell
+.\nisec.ps1 dvwa                                 # start the vulnerable web app
+```
+
+Then run the bonus suite from Kali:
+
 ```bash
-make dvwa                                        # start the vulnerable web app
 vagrant ssh kali -c "cd /vagrant/attacks && BONUS=true ./run_all.sh"
 ```
 
@@ -504,6 +516,12 @@ demonstrate that literally:
 
 ```bash
 WAZUH_DEPLOY=docker vagrant up wazuh-server
+```
+
+On Windows, the wrapper equivalent is:
+
+```powershell
+.\nisec.ps1 up-docker
 ```
 
 Needs one-time certificate generation — `deploy-docker/up.sh` prints exact instructions if they're
@@ -582,22 +600,28 @@ All checkpoints above still apply — just use `ssh` instead of `vagrant ssh`.
 
 ## Quick command reference
 
-```bash
-make help          # list every target
-make up            # build the lab (4 VMs)
-make up-budget     # build the lab (3 VMs, 8 GB hosts)
-make status        # VM status
-make healthcheck   # verify connectivity + every service
-make harden        # apply access-control hardening
-make retention     # apply the log retention policy
-make attacks       # run the detection suite from Kali
-make malware-test  # run the FIM/ransomware test
-make capture       # 60s packet capture
-make dvwa          # [bonus] start DVWA
-make ssh-kali      # shell into a VM (also ssh-monitored, ssh-wazuh-server)
-make halt          # stop everything
-make destroy       # delete everything
+```powershell
+.\nisec.ps1 up            # build the lab (4 VMs)
+.\nisec.ps1 up-budget     # build the lab (3 VMs, 8 GB hosts)
+.\nisec.ps1 help          # list wrapper targets
+.\nisec.ps1 status        # VM status
+.\nisec.ps1 healthcheck   # verify connectivity + every service
+.\nisec.ps1 test          # offline rule regression
+.\nisec.ps1 harden        # apply access-control hardening
+.\nisec.ps1 retention -IndexerPass '<admin password>'
+.\nisec.ps1 attacks       # run the detection suite from Kali
+.\nisec.ps1 malware-test  # run the FIM/ransomware test
+.\nisec.ps1 measure       # detection rate + latency -> evidence/
+.\nisec.ps1 evasion       # detection boundary tests
+.\nisec.ps1 seal          # hash evidence/
+.\nisec.ps1 capture       # 60s packet capture
+.\nisec.ps1 dvwa          # [bonus] start DVWA
+.\nisec.ps1 ssh-kali      # shell into a VM (also ssh-monitored, ssh-wazuh-server)
+.\nisec.ps1 halt          # stop everything
+.\nisec.ps1 destroy       # delete everything
 ```
+
+If you are using Git Bash or Linux, every wrapper target above has the equivalent `make <target>`.
 
 **Safety:** everything runs on an isolated host-only network against your own VMs. That's legal
 and expected. Never point these tools at machines you don't own or across the internet.

@@ -45,7 +45,7 @@ fi
 ok "suricata present on the monitored server"
 
 # HOME_NET must exclude the attacker or every rule below is unmatchable.
-HN="$(mon "grep -E '^ *HOME_NET:' /etc/suricata/suricata.yaml | head -1")"
+HN="$(mon "sudo grep -E '^ *HOME_NET:' /etc/suricata/suricata.yaml | head -1")"
 if echo "$HN" | grep -q '192.168.56.10'; then
   bad "HOME_NET contains the attacker .10 - EXTERNAL_NET rules cannot match: ${HN}"
 elif [ -z "$HN" ]; then

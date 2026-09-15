@@ -9,46 +9,57 @@ Day-to-day reference for a lab that's **already built**.
 
 ## Command reference
 
+On Windows, run these from PowerShell in the repo root. `nisec.ps1` is the preferred wrapper
+because it avoids PowerShell accidentally calling WSL `bash.exe` for host-side scripts.
+
 ### Lifecycle
 
-```bash
-make up              # build/start the full 4-VM lab
-make up-budget       # 3-VM lab (no client) for 8 GB hosts
-make up-docker       # build with a containerised Wazuh stack
-make halt            # stop all VMs (keeps state)
-make destroy         # delete all VMs (irreversible)
-make status          # what's running
-make reload          # restart + re-provision
-make provision       # re-run provisioners only (no restart)
+```powershell
+.\nisec.ps1 up              # build/start the full 4-VM lab
+.\nisec.ps1 up-budget       # 3-VM lab (no client) for 8 GB hosts
+.\nisec.ps1 up-docker       # build with a containerised Wazuh stack
+.\nisec.ps1 halt            # stop all VMs (keeps state)
+.\nisec.ps1 destroy         # delete all VMs (irreversible)
+.\nisec.ps1 status          # what's running
+.\nisec.ps1 reload          # restart + re-provision
+.\nisec.ps1 provision       # re-run provisioners only (no restart)
 ```
 
 ### Operations
 
-```bash
-make healthcheck     # verify connectivity + every service across the lab
-make harden          # apply dashboard access-control hardening
-make retention       # apply the log retention policy
-make capture         # 60s packet capture on the monitored server
+```powershell
+.\nisec.ps1 healthcheck     # verify connectivity + every service across the lab
+.\nisec.ps1 harden          # apply dashboard access-control hardening
+.\nisec.ps1 retention -IndexerPass '<admin password>'
+.\nisec.ps1 capture         # 60s packet capture on the monitored server
 ```
 
 ### Testing
 
-```bash
-make attacks                    # detection suite from Kali (tests 1,2,3,5)
-make malware-test               # FIM/ransomware test (on monitored server)
-BONUS=true make attacks         # include the bonus web attack
-PAUSE=45 make attacks           # longer gaps between tests
-make dvwa                       # [bonus] start DVWA
+```powershell
+.\nisec.ps1 test                # offline regression test for custom signatures
+.\nisec.ps1 attacks             # detection suite from Kali (tests 1,2,3,5)
+.\nisec.ps1 malware-test        # FIM/ransomware test (on monitored server)
+.\nisec.ps1 evasion             # detection boundary tests
+.\nisec.ps1 measure             # detection rate + latency table -> evidence/
+.\nisec.ps1 seal                # hash evidence/ into a manifest
+.\nisec.ps1 dvwa                # [bonus] start DVWA
 ```
+
+For the bonus `BONUS=true` and `PAUSE=45` variants, use Git Bash with `make` or run the
+underlying Kali command directly with the environment variable set.
 
 ### Shell access
 
-```bash
-make ssh-wazuh-server
-make ssh-monitored
-make ssh-client
-make ssh-kali
+```powershell
+.\nisec.ps1 ssh-wazuh-server
+.\nisec.ps1 ssh-monitored
+.\nisec.ps1 ssh-client
+.\nisec.ps1 ssh-kali
 ```
+
+If you are in Git Bash or Linux, the equivalent commands are still `make up`, `make status`,
+`make healthcheck`, `make attacks`, and so on.
 
 ---
 
@@ -120,7 +131,8 @@ vagrant ssh monitored -c "sudo suricata-update --local /etc/suricata/rules/nisec
 
 **Why this happens:** Suricata only loads files listed under `rule-files:` in `suricata.yaml`, and
 `suricata-update` regenerates that directory. Copying a `.rules` file alongside it does nothing.
-`--local` is the supported way to merge custom rules in. `make healthcheck` checks this for you.
+`--local` is the supported way to merge custom rules in. `.\nisec.ps1 healthcheck` / `make
+healthcheck` checks this for you.
 
 ### Indexer won't start / everything crawls
 
@@ -132,7 +144,11 @@ vagrant ssh wazuh-server -c "sudo journalctl -u wazuh-indexer -n 50 --no-pager"
 ```
 
 Fixes, in order of preference: raise the VM's memory in the `Vagrantfile` (6–8 GB), or run
-`make up-budget` to drop the client VM and free ~1.5 GB.
+`.\nisec.ps1 up-budget` / `make up-budget` to drop the client VM and free ~1.5 GB.
+
+On a 16 GB Windows host, it is normal to keep `client` powered off while learning the lab. That
+makes the `client agent` healthcheck fail, but the core Wazuh + Suricata detection path can still
+be valid.
 
 ### Suricata sees no traffic
 
@@ -189,13 +205,18 @@ test runner accounts for it and continues.
 
 ## Health check reference
 
-```bash
-make healthcheck
+```powershell
+.\nisec.ps1 healthcheck
 ```
 
 Verifies: reachability of all four IPs · Wazuh manager/indexer/dashboard active · both agents
 active · Suricata active · `eve.json` non-empty · **custom SIDs loaded** · DVWA responding ·
 attack tools present on Kali.
+
+Expected red items in partial/budget runs:
+
+- `client agent` when the `client` VM is powered off.
+- `DVWA not up` unless you deliberately started the optional vulnerable web app.
 
 Anything marked `[fail]` maps to a section above.
 
@@ -228,7 +249,8 @@ vagrant provision monitored
 vagrant destroy -f monitored && vagrant up monitored
 
 # nuclear option
-make destroy && make up
+.\nisec.ps1 destroy
+.\nisec.ps1 up
 ```
 
 > Before destroying anything, copy `evidence/` somewhere safe. Screenshots and logs are your
