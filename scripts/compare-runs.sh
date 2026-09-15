@@ -1,0 +1,282 @@
+#!/usr/bin/env bash
+# compare-runs.sh — Detection Latency Comparison Engine
+#
+# Reads all evidence/detection-results_*.md files produced by `make measure`
+# and generates a latency drift report comparing detection speed across runs.
+#
+# No live VMs required — runs entirely from the evidence files already on disk.
+# You can run this even after `make halt`.
+#
+# For each test scenario (portscan, bruteforce, pingflood, fim) it:
+#   • Extracts the detection latency from every timestamped results file
+#   • Computes the change vs the previous run (Δ seconds, % change)
+#   • Flags regressions: >20% slower than the previous run → ⚠️
+#   • Summarises as a comparison table and per-run detail blocks
+#
+# Usage:
+#   make compare
+#   bash scripts/compare-runs.sh
+#
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+EVIDENCE_DIR="evidence"
+OUT="${EVIDENCE_DIR}/latency-drift_$(date +%Y%m%d_%H%M%S).md"
+
+c_ok()   { printf '\033[32m%s\033[0m\n' "$1"; }
+c_bad()  { printf '\033[31m%s\033[0m\n' "$1"; }
+c_info() { printf '  %s\n' "$1"; }
+
+echo "############################################################"
+echo "# NISec Latency Drift Report"
+echo "# output -> ${OUT}"
+echo "############################################################"
+
+# ---------------------------------------------------------------------------
+# Collect results files (sorted = chronological because filename = timestamp)
+# ---------------------------------------------------------------------------
+mapfile -t RESULT_FILES < <(ls -1 "${EVIDENCE_DIR}"/detection-results_*.md 2>/dev/null | sort)
+
+if [[ ${#RESULT_FILES[@]} -eq 0 ]]; then
+  c_bad "No detection-results_*.md files found in ${EVIDENCE_DIR}/."
+  c_bad "Run 'make measure' at least once first, then re-run 'make compare'."
+  exit 1
+fi
+
+c_info "found ${#RESULT_FILES[@]} run(s):"
+for f in "${RESULT_FILES[@]}"; do c_info "  $f"; done
+echo
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+# parse_latency <file> <test-prefix>
+# Prints the numeric latency in seconds, or "MISS" if NOT DETECTED / absent.
+# Always prints something — never returns empty string.
+parse_latency() {
+  local file="$1" prefix="$2" _result
+  _result="$(grep -i "^| ${prefix}" "$file" 2>/dev/null \
+    | head -1 \
+    | awk -F'|' '{
+        result  = $3; gsub(/^ +| +$/, "", result)
+        latency = $5; gsub(/^ +| +$/, "", latency)
+        if (result ~ /NOT DETECTED/ || latency == "-" || latency == "") {
+          print "MISS"
+        } else {
+          gsub(/[^0-9]/, "", latency)
+          print (latency+0 > 0) ? latency+0 : "MISS"
+        }
+      }')"
+  # If grep found no matching row (test absent from this file), awk produces no
+  # output — default to MISS so callers never receive an empty string.
+  printf '%s' "${_result:-MISS}"
+}
+
+# parse_rule <file> <test-prefix> — prints the rule ID that fired
+parse_rule() {
+  local file="$1" prefix="$2"
+  grep -i "^| ${prefix}" "$file" 2>/dev/null \
+    | head -1 \
+    | awk -F'|' '{r=$4; gsub(/^ +| +$/,"",r); print r}'
+}
+
+# run_date <filepath> — pretty-print date from filename
+# filename format: detection-results_YYYYMMDD_HHMMSS.md
+run_date() {
+  local base ts Y M D h m s
+  base="$(basename "$1" .md)"
+  ts="${base#detection-results_}"
+  Y="${ts:0:4}" M="${ts:4:2}" D="${ts:6:2}"
+  h="${ts:9:2}" m="${ts:11:2}" s="${ts:13:2}"
+  printf '%s-%s-%s %s:%s:%s' "$Y" "$M" "$D" "$h" "$m" "$s"
+}
+
+# ---------------------------------------------------------------------------
+# Test definitions: display label → prefix used to grep results rows
+# Order matters for the output table.
+# ---------------------------------------------------------------------------
+TEST_KEYS=("portscan" "bruteforce" "pingflood" "fim")
+declare -A TEST_PREFIX=(
+  ["portscan"]="1. Port scan"
+  ["bruteforce"]="2. SSH brute"
+  ["pingflood"]="3. Ping flood"
+  ["fim"]="4. Malware"
+)
+declare -A TEST_DISPLAY=(
+  ["portscan"]="Port scan (nmap -sS)"
+  ["bruteforce"]="SSH brute-force (hydra)"
+  ["pingflood"]="Ping flood (hping3)"
+  ["fim"]="Malware / FIM (EICAR)"
+)
+
+# ---------------------------------------------------------------------------
+# Gather latencies and rules per test per run
+# LATENCY[test,idx] and RULE_FIRED[test,idx]
+# ---------------------------------------------------------------------------
+declare -A LATENCY
+declare -A RULE_FIRED
+
+RUN_COUNT="${#RESULT_FILES[@]}"
+
+for idx in "${!RESULT_FILES[@]}"; do
+  f="${RESULT_FILES[$idx]}"
+  for key in "${TEST_KEYS[@]}"; do
+    LATENCY["${key},${idx}"]="$(parse_latency "$f" "${TEST_PREFIX[$key]}")"
+    RULE_FIRED["${key},${idx}"]="$(parse_rule   "$f" "${TEST_PREFIX[$key]}")"
+  done
+done
+
+# ---------------------------------------------------------------------------
+# Write the report
+# ---------------------------------------------------------------------------
+{
+  echo '# Detection Latency Drift Report'
+  echo
+  printf '**Generated by** `scripts/compare-runs.sh` on %s  \n' \
+    "$(date '+%Y-%m-%d %H:%M:%S')"
+  printf '**Runs analysed:** %s\n\n' "$RUN_COUNT"
+  echo '---'
+  echo
+
+  # ---- Comparison table ----
+  echo '## Latency Comparison Table'
+  echo
+  printf '> ✅ = detected (seconds to alert)  |  '
+  printf '❌ = not detected within timeout  |  '
+  echo '⚠️ = regression (>20% slower than previous run)'
+  echo
+
+  # Header row
+  printf '| Test'
+  for idx in "${!RESULT_FILES[@]}"; do
+    printf ' | Run %d<br>%s' "$((idx+1))" "$(run_date "${RESULT_FILES[$idx]}")"
+  done
+  echo ' | Trend |'
+
+  # Separator
+  printf '|:---'
+  for _ in "${!RESULT_FILES[@]}"; do printf '|:---'; done
+  echo '|:---|'
+
+  # One row per test
+  for key in "${TEST_KEYS[@]}"; do
+    printf '| **%s**' "${TEST_DISPLAY[$key]}"
+    prev_val=""
+    overall_trend="→ stable"
+
+    for idx in "${!RESULT_FILES[@]}"; do
+      val="${LATENCY[${key},${idx}]}"
+      cell=""
+
+      if [[ "$val" == "MISS" ]]; then
+        cell="❌ MISS"
+        overall_trend="❌ missed"
+      else
+        if [[ -n "$prev_val" && "$prev_val" != "MISS" ]]; then
+          delta=$(( val - prev_val ))
+          if [[ "$prev_val" -gt 0 ]]; then
+            pct=$(( (delta * 100) / prev_val ))
+          else
+            pct=0
+          fi
+
+          if [[ "$pct" -gt 20 ]]; then
+            cell="⚠️ ${val}s (+${pct}%)"
+            overall_trend="⬆️ regression"
+          elif [[ "$pct" -lt -10 ]]; then
+            cell="⬇️ ${val}s (${pct}%)"
+            overall_trend="⬇️ improved"
+          else
+            cell="✅ ${val}s"
+            overall_trend="→ stable"
+          fi
+        else
+          cell="✅ ${val}s"
+        fi
+        prev_val="$val"
+      fi
+      printf ' | %s' "$cell"
+    done
+    printf ' | %s |\n' "$overall_trend"
+  done
+
+  echo
+  echo '---'
+  echo
+
+  # ---- Per-run detail ----
+  echo '## Per-Run Detail'
+  echo
+  for idx in "${!RESULT_FILES[@]}"; do
+    f="${RESULT_FILES[$idx]}"
+    printf '### Run %d — %s\n\n' "$((idx+1))" "$(run_date "$f")"
+    printf '**File:** `%s`\n\n' "$f"
+    echo '| Test | Result | Rule fired | Latency |'
+    echo '|---|---|---|---|'
+    for key in "${TEST_KEYS[@]}"; do
+      val="${LATENCY[${key},${idx}]}"
+      rule="${RULE_FIRED[${key},${idx}]:-—}"
+      if [[ "$val" == "MISS" ]]; then
+        printf '| %s | ❌ NOT DETECTED | %s | — |\n' \
+          "${TEST_DISPLAY[$key]}" "$rule"
+      else
+        printf '| %s | ✅ DETECTED | %s | %ss |\n' \
+          "${TEST_DISPLAY[$key]}" "$rule" "$val"
+      fi
+    done
+    echo ''
+  done
+
+  echo '---'
+  echo
+
+  # ---- Interpretation ----
+  echo '## Interpretation Guide'
+  echo
+  echo '| Symbol | Meaning |'
+  echo '|---|---|'
+  echo '| ⚠️ +N% | Latency increased >20% vs prior run — investigate pipeline load |'
+  echo '| ⬇️ -N% | Latency decreased >10% — VM warmed up or alert path improved |'
+  echo '| → stable | Within ±20% — normal measurement variance |'
+  echo '| ❌ MISS | No alert within timeout — see evasion report (`make evasion`) |'
+  echo
+
+  echo 'Possible causes of regression (⚠️):'
+  echo
+  echo '- **VM load:** Host under memory pressure → Suricata/Wazuh CPU budget reduced'
+  echo '- **Alert queue backlog:** Check `sudo /var/ossec/bin/wazuh-control status` on the manager'
+  echo '- **Rule threshold change:** If you edited `local_rules.xml` between runs'
+  echo '- **Network variance:** hping3 flood rate varies with host CPU; latency is end-to-end'
+  echo
+
+  echo '---'
+  echo
+
+  echo '## Method'
+  echo
+  echo '- All data parsed from `evidence/detection-results_*.md` (no live VMs needed).'
+  echo '- Files sorted by filename = chronological order.'
+  echo '- Latency extracted from the "Time to alert" column of each results table.'
+  echo '- Regression threshold: +20% vs the immediately preceding run.'
+  echo '- Trend column reflects the most recent pair of runs only.'
+  echo '- Run `make measure` additional times to build a larger sample for trend analysis.'
+  echo
+
+} > "$OUT"
+
+c_ok "Latency drift report -> ${OUT}"
+printf '  runs compared: %s\n' "$RUN_COUNT"
+
+# Quick summary to stdout
+echo
+echo "Quick summary:"
+for key in "${TEST_KEYS[@]}"; do
+  last_idx=$(( RUN_COUNT - 1 ))
+  latest="${LATENCY[${key},${last_idx}]}"
+  if [[ "$latest" == "MISS" ]]; then
+    printf '  %-28s  ❌ MISS (last run)\n' "${TEST_DISPLAY[$key]}"
+  else
+    printf '  %-28s  ✅ %ss (last run)\n' "${TEST_DISPLAY[$key]}" "$latest"
+  fi
+done

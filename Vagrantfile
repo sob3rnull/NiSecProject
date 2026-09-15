@@ -29,11 +29,11 @@ WAZUH_DEPLOY   = ENV.fetch("WAZUH_DEPLOY", "installer")   # installer | docker
 NODES = {
   "wazuh-server" => ["bento/ubuntu-22.04", "192.168.56.40", 2, 6144,
                      "provision/wazuh-server.sh",     "Management"],
-  "monitored"    => ["bento/ubuntu-22.04", "192.168.56.20", 2, 2560,
+  "monitored"    => ["bento/ubuntu-22.04", "192.168.56.20", 2, 2048,
                      "provision/monitored-server.sh", "Monitoring"],
   "client"       => ["bento/ubuntu-22.04", "192.168.56.30", 1, 1536,
                      "provision/client.sh",           "Client"],
-  "kali"         => ["kalilinux/rolling",  "192.168.56.10", 2, 3072,
+  "kali"         => ["kalilinux/rolling",  "192.168.56.10", 2, 2048,
                      "provision/kali.sh",             "Attack/Test"],
 }
 

@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 .PHONY: help up up-budget up-docker halt destroy status reload provision \
         healthcheck harden retention attacks malware-test capture dvwa ssh-% \
-        test measure evasion active-response seal
+        test measure evasion active-response seal hunt compare score
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_%-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -78,3 +78,12 @@ dvwa:          ## [BONUS] Bring up DVWA on the monitored server
 
 ssh-%:         ## SSH into a VM, e.g. `make ssh-kali`
 	vagrant ssh $*
+
+hunt:          ## Threat Hunt Report — parse live alerts.json -> evidence/
+	bash scripts/hunt.sh
+
+compare:       ## Latency Drift Report — compare detection speed across measure runs -> evidence/
+	bash scripts/compare-runs.sh
+
+score:         ## Confidence Score — rate each rule's reliability across measure runs -> evidence/
+	bash scripts/score-signatures.sh

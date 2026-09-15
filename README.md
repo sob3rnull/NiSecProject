@@ -134,6 +134,31 @@ deliberately and only after your detection evidence is captured.
 
 ---
 
+## Analysis pipeline — turning raw results into publishable analysis
+
+Three additional scripts run **after** `measure` and produce analysis-grade output
+for the report. `compare` and `score` are **offline** — they only read files
+already in `evidence/` and work even after `make halt`.
+
+```powershell
+.\nisec.ps1 measure    # 1. Capture detection evidence  -> evidence/detection-results_*.md
+.\nisec.ps1 hunt       # 2. Threat Hunt Report           (needs wazuh-server up)
+.\nisec.ps1 compare    # 3. Latency Drift report         (offline — no VMs needed)
+.\nisec.ps1 score      # 4. Signature Confidence Scores  (offline — no VMs needed)
+.\nisec.ps1 seal       # 5. Hash all evidence into the tamper-evident manifest
+```
+
+| Command | Needs VMs? | Output file | Use in report |
+|---|---|---|---|
+| `hunt` | Yes (`wazuh-server`) | `evidence/threat-hunt_*.md` | §6 — incident timeline, ATT&CK mapping, remediation |
+| `compare` | **No** | `evidence/latency-drift_*.md` | §6.8 — detection latency trend across runs |
+| `score` | **No** | `evidence/confidence-scores_*.md` | §7 — rule reliability, baseline noise vs signal |
+
+Run `make measure` multiple times (e.g. before and after attacks) to give `compare` and
+`score` more data points for trend analysis.
+
+---
+
 ## Test suite → proposal threats
 
 Each test maps to a threat from your proposal's risk assessment:
@@ -180,7 +205,7 @@ ready-made viva answer covering both.
 ```
 nisec-lab/
 ├── Vagrantfile              # 4 VMs mapped to the 4 security zones
-├── Makefile                 # make up / healthcheck / attacks / ...
+├── Makefile                 # make up / healthcheck / attacks / hunt / compare / score ...
 ├── nisec.ps1                # PowerShell wrapper for Windows
 ├── provision/               # per-VM setup scripts (idempotent bash)
 ├── deploy-docker/           # ALT: containerised Wazuh stack
@@ -191,7 +216,11 @@ nisec-lab/
 ├── attacks/                 # 7 test scripts: 6 threats + the evasion boundary
 ├── capture/                 # Wireshark/tshark capture + analysis
 ├── tests/                   # offline rule regression (pcap replay, no lab needed)
-├── scripts/                 # healthcheck, hardening, retention, MEASUREMENT
+├── scripts/                 # healthcheck, hardening, retention, measurement
+│   ├── measure-detection.sh #   MEASURE: detection rate, rule, time-to-alert
+│   ├── hunt.sh              #   HUNT: threat hunt report from live alerts.json
+│   ├── compare-runs.sh      #   COMPARE: latency drift across measure runs
+│   └── score-signatures.sh  #   SCORE: rule reliability confidence scores
 ├── dvwa/                    # [BONUS] vulnerable web app target
 ├── evidence/                # screenshots / logs / pcaps / results (media git-ignored)
 └── docs/                    # guide, runbook, architecture, traceability, report,
@@ -229,6 +258,36 @@ Both are now checked automatically:
 If `.\nisec.ps1 healthcheck` / `make healthcheck` is green, the lab is genuinely working — not
 just running. In budget mode, the `client` checks are expected to fail because that VM is off.
 DVWA is optional and only needs to be green if you are doing the bonus web attack.
+
+---
+
+## Known issues & workarounds
+
+### VirtualBox Guest Additions version mismatch
+
+If `vagrant up` prints:
+
+```
+Guest Additions Version: 7.2.4
+VirtualBox Version: 7.1
+```
+
+This is a version mismatch between the Guest Additions baked into the Vagrant box (7.2.x) and your
+installed VirtualBox (7.1.x). The VM boots fine. The only risk is shared folders (`/vagrant` inside
+the VM). Verify immediately:
+
+```bash
+# Inside any VM:
+ls /vagrant    # should list Makefile, scripts/, attacks/, etc.
+```
+
+If `/vagrant` is populated — ignore the warning, carry on. If you get a `vboxsf` mount error:
+
+| Fix | Command |
+|---|---|
+| **Upgrade VirtualBox to 7.2** *(recommended)* | Download from virtualbox.org, reinstall |
+| **Auto-sync with plugin** | `vagrant plugin install vagrant-vbguest` then `.\nisec.ps1 reload` |
+| **Downgrade GA inside VM** | `sudo apt-get install -y virtualbox-guest-utils=7.1.*` |
 
 ---
 
