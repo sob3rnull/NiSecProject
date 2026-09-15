@@ -109,8 +109,8 @@ ALERT_TSV="$(mgr "sudo tail -n 20000 ${ALERTS} 2>/dev/null \
          ]
        | @tsv' 2>/dev/null")"
 
-UNIQUE_RULES="$(printf '%s\n' "$ALERT_TSV" | awk -F'\t' '{print $2}' | sort -u)"
-UNIQUE_RULE_COUNT="$(printf '%s\n' "$UNIQUE_RULES" | grep -c .)"
+UNIQUE_RULES="$(printf '%s\n' "$ALERT_TSV" | awk -F'\t' 'NF>=2 && $2!="" {print $2}' | sort -u)"
+UNIQUE_RULE_COUNT="$(printf '%s\n' "$UNIQUE_RULES" | grep -c '[^[:space:]]' || echo 0)"
 
 c_ok "  ${TOTAL} alerts | ${UNIQUE_RULE_COUNT} unique rule IDs | ${SINCE_HUMAN} → ${NOW_HUMAN}"
 
@@ -213,6 +213,8 @@ the MITRE ATT&CK technique that best fits." ;;
   printf '|---|---|---|---|---|---|\n'
   printf '%s\n' "$ALERT_TSV" | sort | head -n 30 \
     | while IFS=$'\t' read -r ts rid desc lvl agent srcip; do
+        # jq output order: timestamp, rule.id, rule.description, rule.level, agent.name, data.srcip
+        # Table header:    Timestamp | Rule ID  | Level | Agent | Source IP | Description
         printf '| %s | %s | %s | %s | %s | %s |\n' \
           "${ts:0:19}" "$rid" "$lvl" "$agent" "$srcip" "$desc"
       done
@@ -261,11 +263,12 @@ the MITRE ATT&CK technique that best fits." ;;
 
   # ---- Method ----
   printf '## Method\n\n'
-  printf -- '- Alert data queried from `%s` on `wazuh-server` via `jq`.\n' "$ALERTS"
-  printf -- '- Window cutoff (`T0 = %s`) applied on the manager — single clock, no VM skew.\n' "$SINCE_EPOCH"
-  printf -- '- Timeline capped at 30 events; full data remains in `alerts.json`.\n'
-  printf -- '- ATT&CK mapping is static, derived from `config/wazuh-manager/local_rules.xml`.\n'
-  printf -- '- False negatives (missed attacks) are in the evasion report (`make evasion`).\n\n'
+  printf '- Alert data queried from `%s` on `wazuh-server` via `jq`.\n' "$ALERTS"
+  printf '- Window cutoff (T0 = %s) applied on the manager — single clock, no VM skew.\n' "$SINCE_EPOCH"
+  echo '- Timeline capped at 30 events; full data remains in `alerts.json`.'
+  echo '- ATT&CK mapping is static, derived from `config/wazuh-manager/local_rules.xml`.'
+  echo '- False negatives (missed attacks) are in the evasion report (`make evasion`).'
+  echo
 
 } > "$OUT"
 

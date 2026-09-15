@@ -102,7 +102,8 @@ for f in "${RESULT_FILES[@]}"; do
       [[ "$label" == "${TEST_PREFIX[$key]}"* ]] || continue
       if printf '%s\n' "$result" | grep -q "NOT DETECTED"; then
         MISS_COUNT["$key"]=$(( ${MISS_COUNT["$key"]:-0} + 1 ))
-      elif printf '%s\n' "$result" | grep -qi "DETECTED"; then
+      elif printf '%s\n' "$result" | grep -qi "DETECTED" && \
+           ! printf '%s\n' "$result" | grep -qi "NOT DETECTED"; then
         DETECTED_COUNT["$key"]=$(( ${DETECTED_COUNT["$key"]:-0} + 1 ))
         [[ "$rule" != "-" && -n "$rule" ]] && \
           RULE_SEEN["$key"]="${RULE_SEEN["$key"]:-} $rule"
@@ -178,7 +179,7 @@ primary_rule() {
   echo '## Confidence Score Table'
   echo
   echo '**Confidence** = DETECTED runs ÷ total runs exercising that test scenario.'
-  echo '100%% means the rule fired every single time.'
+  echo '100% means the rule fired every single time.'
   echo
   echo '| Test Scenario | Primary Rule | Expected Rules | Det | Miss | Avg Latency | Score | Rating |'
   echo '|---|---|---|---|---|---|---|---|'
@@ -196,7 +197,8 @@ primary_rule() {
       "$det" "$mis" "$avglt" "$score_disp" "$label"
   done
 
-  echo '\n---'
+  echo
+  echo '---'
   echo
 
   # ---- Baseline noise section ----
@@ -279,7 +281,7 @@ primary_rule() {
   # ---- How to use this in the report ----
   echo '## Using These Scores in Your Report'
   echo
-  echo '### For HIGH confidence rules (≥90%%)'
+  echo '### For HIGH confidence rules (≥90%)'
   echo
   echo 'State the score and cite the detection latency directly:'
   echo
@@ -287,19 +289,19 @@ primary_rule() {
     "${#RESULT_FILES[@]}"
   echo '>  with an average latency of X seconds. We assign HIGH confidence to this detection."*'
   echo
-  echo '### For MEDIUM confidence rules (60–89%%)'
+  echo '### For MEDIUM confidence rules (60–89%)'
   echo
   echo 'Name the variability and explain it:'
   echo
-  echo '> *"The port-scan rule detected in 75%% of runs. The two misses occurred when'
+  echo '> *"The port-scan rule detected in 75% of runs. The two misses occurred when'
   echo '>  the host was under high load — Suricata dropped packets and the threshold'
   echo '>  was not crossed. This is a documented limitation, not a result artefact."*'
   echo
-  echo '### For LOW confidence rules (<60%%)'
+  echo '### For LOW confidence rules (<60%)'
   echo
   echo 'Report the score as a finding, not a failure:'
   echo
-  echo '> *"The ping-flood rule has LOW confidence (50%%), suggesting the threshold'
+  echo '> *"The ping-flood rule has LOW confidence (50%), suggesting the threshold'
   printf '>  in local.rules (count:100, seconds:5) is conservative for this lab'\''s\n'
   echo '>  virtual NIC. Lowering the threshold to count:50 would be a recommended'
   echo '>  remediation — but we chose not to retune mid-project to preserve'

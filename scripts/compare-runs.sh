@@ -53,9 +53,10 @@ echo
 
 # parse_latency <file> <test-prefix>
 # Prints the numeric latency in seconds, or "MISS" if NOT DETECTED / absent.
+# Always prints something — never returns empty string.
 parse_latency() {
-  local file="$1" prefix="$2"
-  grep -i "^| ${prefix}" "$file" 2>/dev/null \
+  local file="$1" prefix="$2" _result
+  _result="$(grep -i "^| ${prefix}" "$file" 2>/dev/null \
     | head -1 \
     | awk -F'|' '{
         result  = $3; gsub(/^ +| +$/, "", result)
@@ -63,10 +64,13 @@ parse_latency() {
         if (result ~ /NOT DETECTED/ || latency == "-" || latency == "") {
           print "MISS"
         } else {
-          gsub(/[^0-9]/, "", latency)   # strip "s", ">", spaces
+          gsub(/[^0-9]/, "", latency)
           print (latency+0 > 0) ? latency+0 : "MISS"
         }
-      }'
+      }')"
+  # If grep found no matching row (test absent from this file), awk produces no
+  # output — default to MISS so callers never receive an empty string.
+  printf '%s' "${_result:-MISS}"
 }
 
 # parse_rule <file> <test-prefix> — prints the rule ID that fired
@@ -140,7 +144,7 @@ done
   echo
   printf '> ✅ = detected (seconds to alert)  |  '
   printf '❌ = not detected within timeout  |  '
-  echo '⚠️ = regression (>20%% slower than previous run)'
+  echo '⚠️ = regression (>20% slower than previous run)'
   echo
 
   # Header row
@@ -197,7 +201,8 @@ done
     printf ' | %s |\n' "$overall_trend"
   done
 
-  echo '\n---'
+  echo
+  echo '---'
   echo
 
   # ---- Per-run detail ----
@@ -231,9 +236,9 @@ done
   echo
   echo '| Symbol | Meaning |'
   echo '|---|---|'
-  echo '| ⚠️ +N%% | Latency increased >20%% vs prior run — investigate pipeline load |'
-  echo '| ⬇️ -N%% | Latency decreased >10%% — VM warmed up or alert path improved |'
-  echo '| → stable | Within ±20%% — normal measurement variance |'
+  echo '| ⚠️ +N% | Latency increased >20% vs prior run — investigate pipeline load |'
+  echo '| ⬇️ -N% | Latency decreased >10% — VM warmed up or alert path improved |'
+  echo '| → stable | Within ±20% — normal measurement variance |'
   echo '| ❌ MISS | No alert within timeout — see evasion report (`make evasion`) |'
   echo
 
@@ -253,7 +258,7 @@ done
   echo '- All data parsed from `evidence/detection-results_*.md` (no live VMs needed).'
   echo '- Files sorted by filename = chronological order.'
   echo '- Latency extracted from the "Time to alert" column of each results table.'
-  echo '- Regression threshold: +20%% vs the immediately preceding run.'
+  echo '- Regression threshold: +20% vs the immediately preceding run.'
   echo '- Trend column reflects the most recent pair of runs only.'
   echo '- Run `make measure` additional times to build a larger sample for trend analysis.'
   echo
