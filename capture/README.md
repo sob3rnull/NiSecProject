@@ -40,6 +40,22 @@ bash /vagrant/capture/analyze.sh evidence/pcaps/capture_20260806_101500.pcap
 
 Copy the `.pcap` to your host and open it in Wireshark for the screenshots.
 
+## Pairing with the analysis pipeline
+
+After a capture run, feed the evidence into the three analysis scripts:
+
+```powershell
+.\nisec.ps1 capture    # collect the pcap
+.\nisec.ps1 measure    # record detection latency -> evidence/detection-results_*.md
+.\nisec.ps1 hunt       # threat hunt report from live alerts
+.\nisec.ps1 compare    # latency drift across multiple measure runs (offline)
+.\nisec.ps1 score      # rule confidence scores (offline)
+.\nisec.ps1 seal       # hash everything including the pcap
+```
+
+The pcap and the markdown reports are hashed together by `make seal`, so the
+evidence chain covers both the raw traffic and the analysis derived from it.
+
 ## Useful Wireshark display filters for your report
 
 | Goal | Filter |

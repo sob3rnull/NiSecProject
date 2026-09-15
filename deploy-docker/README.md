@@ -40,17 +40,28 @@ cp .env.example .env      # then EDIT the passwords
 ./down.sh                 # stop; add -v inside the script to wipe volumes
 ```
 
-To use this instead of the installer when provisioning:
-
-```powershell
-.\nisec.ps1 up-docker
-```
-
 Equivalent without the PowerShell wrapper:
 
 ```bash
 WAZUH_DEPLOY=docker vagrant up wazuh-server
 ```
+
+## After the stack is up
+
+The analysis pipeline works identically regardless of whether you used the installer or Docker:
+
+```powershell
+.\nisec.ps1 attacks    # run attack suite from Kali
+.\nisec.ps1 measure    # record detection latency
+.\nisec.ps1 hunt       # threat hunt report from alerts.json
+.\nisec.ps1 compare    # latency drift across runs (offline, no VMs needed)
+.\nisec.ps1 score      # rule confidence scores (offline, no VMs needed)
+.\nisec.ps1 seal       # hash the evidence
+```
+
+`hunt` SSHes into `wazuh-server` and reads `/var/ossec/logs/alerts/alerts.json` — this path
+is the same whether Wazuh is running natively or in Docker, because the container mounts it
+at the same location.
 
 ## Gotchas
 
@@ -68,6 +79,9 @@ WAZUH_DEPLOY=docker vagrant up wazuh-server
 - **Port 443 clash** — if the host already serves something on 443, change the dashboard mapping.
 - **Agents still install natively.** The agents on `monitored` and `client` are unchanged; they
   just point at `192.168.56.40:1514` as before.
+- **Guest Additions mismatch warning** — if `vagrant up` warns about a version mismatch between
+  VirtualBox (7.1) and Guest Additions (7.2.4), verify `/vagrant` is mounted inside the VM before
+  proceeding. See the root `README.md` → *Known issues* for the fix.
 
 ## Viva answer
 
