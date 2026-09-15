@@ -132,6 +132,27 @@ Optionally, `.\nisec.ps1 active-response` / `make active-response` closes the lo
 opt-in by design: it writes firewall DROP rules from log events, so enable it
 deliberately and only after your detection evidence is captured.
 
+## Analysis pipeline — turning raw results into publishable analysis
+
+Three additional scripts run **after** \measure\ and produce analysis-grade output
+for the report. The \compare\ and \score\ scripts are **offline** — they only read
+files already in \evidence/\ and work even after \make halt\.
+
+\\powershell
+.\nisec.ps1 measure    # 1. Capture detection evidence -> evidence/detection-results_*.md
+.\nisec.ps1 hunt       # 2. Threat Hunt Report (needs wazuh-server up)
+.\nisec.ps1 compare    # 3. Latency Drift across all measure runs (offline)
+.\nisec.ps1 score      # 4. Signature Confidence Scores (offline)
+.\nisec.ps1 seal       # 5. Hash all evidence into the tamper-evident manifest
+\
+| Command | Needs VMs? | Output | Use in report |
+|---|---|---|---|
+| \hunt\ | Yes (\wazuh-server\) | \evidence/threat-hunt_*.md\ | §§6 — structured incident analysis, ATT&CK mapping, remediation |
+| \compare\ | **No** | \evidence/latency-drift_*.md\ | §§6.8 — detection latency trend across multiple runs |
+| \score\ | **No** | \evidence/confidence-scores_*.md\ | §§7 — rule reliability, baseline noise vs detection signal |
+
+Run \make measure\ multiple times to give \compare\ and \score\ more data points for trend analysis.
+
 ---
 
 ## Test suite → proposal threats

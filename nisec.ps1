@@ -54,6 +54,10 @@ function Show-Help {
     Write-Host "  up, up-budget, up-docker, halt, destroy, status, reload, provision,"
     Write-Host "  healthcheck, test, measure, seal, harden, retention, attacks,"
     Write-Host "  malware-test, evasion, active-response, capture, dvwa, ssh-<vmname>"
+    Write-Host "  --- Analysis pipeline (run after 'measure') ---"
+    Write-Host "  hunt     Threat Hunt Report from live alerts.json -> evidence/"
+    Write-Host "  compare  Latency Drift Report across all measure runs -> evidence/"
+    Write-Host "  score    Signature Confidence Scores across all measure runs -> evidence/"
 }
 
 switch -Regex ($Target) {
@@ -93,12 +97,15 @@ switch -Regex ($Target) {
         vagrant ssh $vmName
     }
 
-    "^(healthcheck|test|measure|seal)$" {
+    "^(healthcheck|test|measure|seal|hunt|compare|score)$" {
         switch ($Target) {
             "healthcheck" { Invoke-HostBashScript "scripts/healthcheck.sh" }
             "test"        { Invoke-HostBashScript "tests/test-rules.sh" }
             "measure"     { Invoke-HostBashScript "scripts/measure-detection.sh" }
             "seal"        { Invoke-HostBashScript "scripts/seal-evidence.sh" }
+            "hunt"        { Invoke-HostBashScript "scripts/hunt.sh" }
+            "compare"     { Invoke-HostBashScript "scripts/compare-runs.sh" }
+            "score"       { Invoke-HostBashScript "scripts/score-signatures.sh" }
         }
     }
 
