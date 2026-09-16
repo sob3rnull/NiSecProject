@@ -1,5 +1,9 @@
 # AI-Assisted Attack Chain Correlation
 
+> **Current implementation:** `scripts/correlate.py` and `scripts/nisec_correlate/`.
+> The `nisec-correlate-feature/` directory contains feature-specific notes; the root
+> `scripts/` implementation is the command used by the main project.
+
 Wazuh and Suricata remain fully responsible for detection. This module adds
 one thing on top: it looks at alerts *already generated* by those two tools
 and asks whether groups of them form a coherent attack sequence, using

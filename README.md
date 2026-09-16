@@ -1,298 +1,416 @@
-# NISec — Centralized Security Monitoring System (Wazuh + Suricata)
+# NISec — Centralized Security Monitoring & Detection Lab
 
-**Zwe Nyi Nyar — TNT-2061**
-CST-8415 Network & Internet Security · Faculty of Computer Systems and Technologies
+**Zwe Nyi Nyar — TNT-2061**  
+CST-8415 Network & Internet Security · Faculty of Computer Systems and Technologies  
 University of Information Technology
 
-Implementation of the submitted proposal: *Design and Implementation of a Centralized Security
-Monitoring System Using Wazuh and Suricata.*
+NISec is an isolated security-monitoring lab that combines **Wazuh** for host-based
+monitoring/SIEM functions with **Suricata** for network intrusion detection. The lab is
+provisioned with Vagrant and VirtualBox, tested from Kali Linux, and produces repeatable
+evidence for detection, latency, packet-level corroboration, threat hunting, risk analysis,
+and optional AI-assisted attack-chain reporting.
 
-Suricata watches the network, Wazuh agents watch each machine, and both report to one Wazuh server
-you view from a single dashboard.
+> **Core pipeline:** Kali generates controlled traffic → Suricata inspects network traffic →
+> `eve.json` is collected by the Wazuh agent → Wazuh Manager decodes and rules the event →
+> Wazuh Indexer stores it → Wazuh Dashboard presents the alert alongside host telemetry.
 
 ---
 
-## 📖 Start here
+## Start here
 
-| I want to… | Read |
+| Goal | Document |
 |---|---|
-| **Build the lab from scratch** | **[`docs/step-by-step-guide.md`](docs/step-by-step-guide.md)** ← start here |
-| Fix something / look up a command | [`docs/runbook.md`](docs/runbook.md) |
-| Understand the design | [`docs/architecture.md`](docs/architecture.md) |
-| Prove I delivered what I promised | [`docs/proposal-traceability.md`](docs/proposal-traceability.md) |
-| Write the report | [`docs/report-skeleton.md`](docs/report-skeleton.md) |
-| Justify my risk ratings | [`docs/risk-assessment.md`](docs/risk-assessment.md) |
-| Show coverage against a framework | [`docs/attack-mapping.md`](docs/attack-mapping.md) |
-| Cite something | [`docs/references.md`](docs/references.md) |
-
-**Quickest path on Windows:** `.\nisec.ps1 up` -> wait -> `.\nisec.ps1 healthcheck` ->
-`.\nisec.ps1 test` -> `.\nisec.ps1 measure`.
-
-**Quickest path with make/Git Bash:** `make up` -> wait -> `make healthcheck` ->
-`make test` -> `make measure`.
+| Build the lab from scratch | **[`docs/step-by-step-guide.md`](docs/step-by-step-guide.md)** |
+| Understand the architecture | **[`docs/architecture.md`](docs/architecture.md)** |
+| Operate / troubleshoot an existing lab | [`docs/runbook.md`](docs/runbook.md) |
+| Map the implementation to the proposal | [`docs/proposal-traceability.md`](docs/proposal-traceability.md) |
+| Write the final report | [`docs/report-skeleton.md`](docs/report-skeleton.md) |
+| Understand risk methodology | [`docs/risk-assessment.md`](docs/risk-assessment.md) |
+| Map detections to ATT&CK / NIST CSF | [`docs/attack-mapping.md`](docs/attack-mapping.md) |
+| Use packet captures | [`capture/README.md`](capture/README.md) |
+| Use AI attack-chain correlation | [`docs/ai-correlation.md`](docs/ai-correlation.md) |
+| Generate the HTML security report | [`docs/ai-html-report.md`](docs/ai-html-report.md) |
+| References | [`docs/references.md`](docs/references.md) |
 
 ---
 
-## Lab topology — the four security zones
+## Architecture at a glance
 
-| Zone (proposal §3.3) | VM | IP | Role |
-|---|---|---|---|
-| **Management** | `wazuh-server` | `192.168.56.40` | Manager + Indexer + Dashboard |
-| **Monitoring** | `monitored` | `192.168.56.20` | Suricata IDS + agent + FIM + tshark |
-| **Client** | `client` | `192.168.56.30` | Ordinary monitored endpoint (agent + FIM) |
-| **Attack/Test** | `kali` | `192.168.56.10` | nmap, hydra, hping3, nikto, wireshark |
-
-All four sit on one private host-only network — attacks never leave the lab.
-
----
-
-## Quick start
-
-Requires **VirtualBox** + **Vagrant** on your host.
-
-```powershell
-.\nisec.ps1 up             # build the lab (4 VMs; ~30-60 min on first run)
-.\nisec.ps1 up-budget      # 3 VMs instead, for 8 GB hosts
-.\nisec.ps1 healthcheck    # verify every service across the lab
+```text
+                         192.168.56.0/24 host-only network
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                                                                               │
+│  ATTACK / TEST              MONITORING                  MANAGEMENT            │
+│  ┌──────────────┐           ┌───────────────────┐      ┌──────────────────┐  │
+│  │ Kali .10     │──traffic─>│ monitored .20     │─────>│ Wazuh .40        │  │
+│  │ nmap         │           │ Suricata           │agent │ Manager          │  │
+│  │ hydra        │           │   ↓ eve.json       │1514 │ Indexer           │  │
+│  │ hping3       │           │ Wazuh Agent + FIM  │1515 │ Dashboard :443   │  │
+│  │ nikto        │           │ tshark             │      │ API :55000       │  │
+│  └──────────────┘           └───────────────────┘      └──────────────────┘  │
+│                                      ▲                       ▲                │
+│                                      │                       │                │
+│                               CLIENT .30 ───── Wazuh Agent ─┘                │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
 
-> **Windows command rule:** use `nisec.ps1` from PowerShell. It wraps Vagrant and automatically
-> uses Git Bash for the host-side shell scripts, avoiding the common WSL `bash` failure.
->
-> ```powershell
-> Set-ExecutionPolicy -Scope Process Bypass
-> .\nisec.ps1 status
-> .\nisec.ps1 healthcheck
-> ```
->
-> `make` still works if you run it from Git Bash or a correctly configured shell, but plain
-> PowerShell may pick up WSL's `bash.exe` and fail on targets such as `healthcheck`, `test`,
-> `measure`, and `seal`.
+The four VMs represent the proposal's security zones:
 
-Get your dashboard password (randomly generated at install):
+| VM | IP | Zone | Main responsibility |
+|---|---|---|---|
+| `wazuh-server` | `192.168.56.40` | Management | Wazuh Manager, Indexer, Dashboard |
+| `monitored` | `192.168.56.20` | Monitoring | Suricata, Wazuh Agent, FIM, packet capture |
+| `client` | `192.168.56.30` | Client | Wazuh Agent + FIM |
+| `kali` | `192.168.56.10` | Attack/Test | Controlled attack simulation |
+
+The lab uses one host-only `/24` for practical single-machine deployment. The zones are
+logical security roles rather than production-grade routed VLANs. See
+[`docs/architecture.md`](docs/architecture.md) for the security boundary and limitations.
+
+---
+
+## Requirements
+
+### Host
+
+- VirtualBox
+- Vagrant
+- Windows PowerShell, macOS/Linux shell, or Git Bash
+- Recommended: **16 GB RAM** for the full four-VM configuration
+- Minimum practical configuration: **8 GB RAM** using `up-budget`
+
+### VM resources
+
+| VM | CPUs | RAM | Base box |
+|---|---:|---:|---|
+| Wazuh server | 2 | 6144 MB | `bento/ubuntu-22.04` |
+| Monitored | 2 | 2048 MB | `bento/ubuntu-22.04` |
+| Client | 1 | 1536 MB | `bento/ubuntu-22.04` |
+| Kali | 2 | 2048 MB | `kalilinux/rolling` |
+
+These values are defined in `Vagrantfile`; they are not merely documentation.
+
+---
+
+## Quick start — Windows
+
+PowerShell is the preferred Windows interface:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+
+.\nisec.ps1 up
+.\nisec.ps1 healthcheck
+.\nisec.ps1 test
+.\nisec.ps1 measure
+```
+
+For an 8 GB host:
+
+```powershell
+.\nisec.ps1 up-budget
+```
+
+The first provisioning run can take a while because Wazuh and the required packages are
+installed inside fresh VMs.
+
+### Dashboard
+
+The dashboard is available at:
+
+```text
+https://192.168.56.40
+```
+
+The initial admin password is generated by the Wazuh installer. Retrieve it from the
+server:
 
 ```powershell
 .\nisec.ps1 ssh-wazuh-server
 ```
 
-Then inside the VM:
+Then:
 
 ```bash
-sudo tar -O -xf wazuh-install-files.tar wazuh-install-files/wazuh-passwords.txt | grep -A1 admin
+sudo tar -O -xf wazuh-install-files.tar \
+  wazuh-install-files/wazuh-passwords.txt | grep -A1 admin
 ```
 
-Then browse **https://192.168.56.40** and accept the self-signed certificate.
-
-```powershell
-.\nisec.ps1 harden          # access control (proposal NFR)
-.\nisec.ps1 retention -IndexerPass '<admin password>'
-.\nisec.ps1 attacks         # run the detection suite from Kali
-.\nisec.ps1 malware-test    # FIM / ransomware test (on the monitored server)
-.\nisec.ps1 capture         # 60s packet capture for Wireshark evidence
-```
-
-Run `.\nisec.ps1 help` to print the available PowerShell targets, or `make help` if you are
-using Make.
+The dashboard uses a self-signed certificate in the lab, so a browser warning is expected.
 
 ---
 
-## From apparatus to evidence
+## Quick start — Git Bash / Linux
 
-Building the lab is not the project — **producing defensible results is**. Four
-targets take you from "it runs" to "here are the numbers, and here is why you
-can trust them":
-
-```powershell
-.\nisec.ps1 test       # 1. Do the rules match the traffic they claim to? (offline, no lab traffic needed)
-.\nisec.ps1 measure    # 2. Detection rate, which rule fired, time-to-alert -> evidence/*.md
-.\nisec.ps1 evasion    # 3. Where does detection STOP working? (misses are the result)
-.\nisec.ps1 seal       # 4. Hash the evidence so you can prove it didn't change
+```bash
+make up
+make healthcheck
+make test
+make measure
 ```
 
-**`.\nisec.ps1 test` / `make test`** replays a synthetic pcap through Suricata offline and asserts each
-custom SID fires. Run it first whenever a live attack produces no alert: if the
-rules pass here, the fault is in the pipeline, not the signatures — that one
-distinction saves hours of blind debugging.
+Useful lifecycle commands:
 
-**`.\nisec.ps1 measure` / `make measure`** is the instrument this project needs to make a quantitative
-claim. It reads every timestamp from the Wazuh manager's own clock, so VM skew
-cannot contaminate the latency, records a `NOT DETECTED` row when nothing fires,
-and measures an idle baseline so "we saw N alerts" can be read against the noise
-floor. It writes a markdown table straight into `evidence/`.
-
-**`.\nisec.ps1 evasion` / `make evasion`** is the one that separates a good project from a working one.
-It deliberately stays under each threshold — slow scan, decoy sources,
-fragmentation, throttled brute-force, encrypted payload. Most of it is *expected
-not to alert*. The headline result: a slow SSH brute-force slips past the network
-signature while Wazuh's host rules catch it anyway, because they count failed
-logins rather than packets. That is the empirical argument for running Suricata
-**and** Wazuh — have it ready before anyone asks why one sensor wasn't enough.
-
-Optionally, `.\nisec.ps1 active-response` / `make active-response` closes the loop from detect to respond. It is
-opt-in by design: it writes firewall DROP rules from log events, so enable it
-deliberately and only after your detection evidence is captured.
+```bash
+make status
+make halt
+make reload
+make provision
+make destroy
+```
 
 ---
 
-## Analysis pipeline — turning raw results into publishable analysis
+## Detection workflow
 
-Three additional scripts run **after** `measure` and produce analysis-grade output
-for the report. `compare` and `score` are **offline** — they only read files
-already in `evidence/` and work even after `make halt`.
+The intended workflow is:
 
-```powershell
-.\nisec.ps1 measure    # 1. Capture detection evidence  -> evidence/detection-results_*.md
-.\nisec.ps1 hunt       # 2. Threat Hunt Report           (needs wazuh-server up)
-.\nisec.ps1 compare    # 3. Latency Drift report         (offline — no VMs needed)
-.\nisec.ps1 score      # 4. Signature Confidence Scores  (offline — no VMs needed)
-.\nisec.ps1 seal       # 5. Hash all evidence into the tamper-evident manifest
+```text
+1. Build        → make up
+2. Verify       → make healthcheck
+3. Test rules   → make test
+4. Run attacks  → make attacks
+5. Run FIM test → make malware-test
+6. Capture      → make capture
+7. Measure      → make measure
+8. Hunt         → make hunt
+9. Boundary     → make evasion
+10. Compare     → make compare
+11. Score       → make score
+12. Seal        → make seal
+13. Correlate   → make correlate
+14. Report      → make report
 ```
 
-| Command | Needs VMs? | Output file | Use in report |
+### What each analysis stage proves
+
+| Command | Purpose | VM required? | Output |
 |---|---|---|---|
-| `hunt` | Yes (`wazuh-server`) | `evidence/threat-hunt_*.md` | §6 — incident timeline, ATT&CK mapping, remediation |
-| `compare` | **No** | `evidence/latency-drift_*.md` | §6.8 — detection latency trend across runs |
-| `score` | **No** | `evidence/confidence-scores_*.md` | §7 — rule reliability, baseline noise vs signal |
-
-Run `make measure` multiple times (e.g. before and after attacks) to give `compare` and
-`score` more data points for trend analysis.
-
----
-
-## Test suite → proposal threats
-
-Each test maps to a threat from your proposal's risk assessment:
-
-| # | Test | Script | Threat covered | Run from |
-|---|---|---|---|---|
-| 1 | Port scan | `01_nmap_scan.sh` | Port scanning (Medium) | Kali |
-| 2 | SSH brute-force | `02_ssh_bruteforce.sh` | Brute-force login (**High**) | Kali |
-| 3 | Ping flood | `03_ping_flood.sh` | DoS attack (Medium) | Kali |
-| 4 | Malware / ransomware | `05_malware_fim_test.sh` | Malware (**High**) | **monitored** |
-| 5 | Unauthorized access | `06_unauthorized_access_test.sh` | Unauthorized access | Kali |
-| 6 | Misconfiguration | *no script* — Dashboard → SCA | Misconfiguration (Medium) | Dashboard |
-| 7 | Web attack | `04_web_attack.sh` | *BONUS — beyond submitted scope* | Kali |
-| 8 | **Detection boundary** | `07_evasion_test.sh` | *Maps the limits of 1–3* | Kali |
-
-Test 4 is safe: it uses the **EICAR test string** (the industry-standard harmless AV test file),
-creates its own throwaway binary rather than touching real system commands, and cleans up
-automatically even if interrupted.
-
-The viva point to make: **network** threats are caught by **Suricata**, **host** threats by
-**Wazuh's own rules and FIM** — and both land in one dashboard. That contrast is the whole argument
-for the two-tool design.
+| `test` | Offline regression test for custom Suricata signatures | No | terminal result |
+| `measure` | Detection rate, fired rule, time-to-alert, baseline | Yes | `evidence/detection-results_*.md` |
+| `hunt` | Parse live Wazuh alerts into a threat-hunt report | Wazuh server | `evidence/threat-hunt_*.md` |
+| `evasion` | Probe where rate/signature-based detection stops working | Kali + monitored | terminal/evidence |
+| `compare` | Compare latency across measurement runs | No | `evidence/latency-drift_*.md` |
+| `score` | Summarise rule reliability across runs | No | `evidence/confidence-scores_*.md` |
+| `seal` | SHA-256 manifest over evidence | No | evidence manifest |
+| `correlate` | Deterministically group alerts, then optionally use Gemini | No for `--from-file`; otherwise Wazuh | `evidence/attack-correlation_*.md` |
+| `report` | Build a self-contained HTML report from evidence | No | `evidence/report_*.html` |
 
 ---
 
-## Deployment options
+## Detection coverage
 
-Your proposal states the Ubuntu server *"runs Docker containers for easier deployment."* Both paths
-are provided:
+| Test | Tool / source | Primary detector | Key artefact |
+|---|---|---|---|
+| Port scan | Nmap | Suricata | ET rules + SID `9000002` |
+| SSH brute force | Hydra | Wazuh auth rules | built-in Wazuh rules |
+| Ping flood | hping3 | Suricata | SID `9000001` |
+| Malware/FIM simulation | safe test fixture | Wazuh FIM | rules `100200–100202` |
+| Unauthorized access | curl/auth tests | Wazuh + host controls | auth/firewall controls |
+| Misconfiguration | Wazuh SCA | Wazuh SCA | CIS assessment |
+| Web attack (bonus) | Nikto / DVWA | Suricata | ET web signatures |
+| Evasion boundary | controlled variants | both sensors | `attacks/07_evasion_test.sh` |
+
+**Important:** the project deliberately measures misses. A detection that fails under a
+slow, fragmented, decoy, or encrypted variant is a boundary condition to document—not a
+result to hide.
+
+---
+
+## Wazuh + Suricata integration
+
+The central integration point is:
+
+```text
+Suricata
+   │
+   │ JSON alerts
+   ▼
+/var/log/suricata/eve.json
+   │
+   │ Wazuh Agent <localfile>
+   ▼
+Wazuh Manager
+   │
+   ├── JSON decoder
+   ├── built-in rules
+   └── NISec custom rules (100100+)
+   │
+   ▼
+Wazuh Indexer
+   │
+   ▼
+Wazuh Dashboard
+```
+
+The source snippets are under:
+
+- `config/suricata/local.rules`
+- `config/wazuh-agent/ossec.conf.snippet`
+- `config/wazuh-manager/local_rules.xml`
+
+---
+
+## AI-assisted analysis
+
+AI is an **analysis layer**, not a detector.
+
+### Attack-chain correlation
+
+```text
+Wazuh alerts
+    ↓
+deterministic time/source grouping
+    ↓
+deduplication + cache
+    ↓
+Gemini (optional)
+    ↓
+structured attack-chain interpretation
+    ↓
+evidence/attack-correlation_*.md
+```
+
+Run safely with no API calls:
 
 ```powershell
-.\nisec.ps1 up                                  # all-in-one installer (default, recommended)
-.\nisec.ps1 up-docker                           # containerised Wazuh stack
+.\nisec.ps1 correlate
+.\nisec.ps1 correlate-test
+.\nisec.ps1 correlate --dry-run
 ```
 
-Build with the installer first and capture a clean detection. Only try Docker once your results are
-safely recorded. See [`deploy-docker/README.md`](deploy-docker/README.md) for the trade-offs and a
-ready-made viva answer covering both.
+Real Gemini mode is opt-in through environment variables. The default is `mock`, and the
+pipeline enforces request limits and caching.
+
+### AI-narrated HTML report
+
+The report generator keeps measurements, timestamps, charts, tables, and MITRE mappings
+deterministic. AI contributes narrative text only:
+
+```text
+measure / hunt / correlate evidence
+          ↓
+deterministic evidence parser
+       ↙       ↘
+ charts/tables  optional Gemini narrative
+       ↘       ↙
+     self-contained HTML
+```
+
+```powershell
+.\nisec.ps1 report
+.\nisec.ps1 report-test
+.\nisec.ps1 report --dry-run
+```
+
+See [`docs/ai-correlation.md`](docs/ai-correlation.md) and
+[`docs/ai-html-report.md`](docs/ai-html-report.md).
 
 ---
 
-## Repo layout
+## Deployment modes
 
+Two Wazuh deployment paths are included:
+
+```powershell
+.\nisec.ps1 up
+.\nisec.ps1 up-docker
 ```
+
+The default installer path runs the Wazuh stack as system services. The Docker path
+containerises the Wazuh server stack and is documented separately in
+[`deploy-docker/README.md`](deploy-docker/README.md).
+
+Use the installer path for the most straightforward lab build; use Docker when you want
+to demonstrate reproducibility and container deployment.
+
+---
+
+## Repository layout
+
+```text
 nisec-lab/
-├── Vagrantfile              # 4 VMs mapped to the 4 security zones
-├── Makefile                 # make up / healthcheck / attacks / hunt / compare / score ...
-├── nisec.ps1                # PowerShell wrapper for Windows
-├── provision/               # per-VM setup scripts (idempotent bash)
-├── deploy-docker/           # ALT: containerised Wazuh stack
+├── Vagrantfile
+├── Makefile
+├── nisec.ps1
+├── provision/              # VM provisioning
 ├── config/
-│   ├── suricata/            #   custom threshold rules + config notes
-│   ├── wazuh-agent/         #   eve.json localfile + FIM/rootcheck snippets
-│   └── wazuh-manager/       #   custom rules (100101+) & decoders
-├── attacks/                 # 7 test scripts: 6 threats + the evasion boundary
-├── capture/                 # Wireshark/tshark capture + analysis
-├── tests/                   # offline rule regression (pcap replay, no lab needed)
-├── scripts/                 # healthcheck, hardening, retention, measurement
-│   ├── measure-detection.sh #   MEASURE: detection rate, rule, time-to-alert
-│   ├── hunt.sh              #   HUNT: threat hunt report from live alerts.json
-│   ├── compare-runs.sh      #   COMPARE: latency drift across measure runs
-│   └── score-signatures.sh  #   SCORE: rule reliability confidence scores
-├── dvwa/                    # [BONUS] vulnerable web app target
-├── evidence/                # screenshots / logs / pcaps / results (media git-ignored)
-└── docs/                    # guide, runbook, architecture, traceability, report,
-                             #   risk assessment, ATT&CK mapping, references
+│   ├── suricata/           # local IDS rules + configuration notes
+│   ├── wazuh-agent/        # agent snippets
+│   └── wazuh-manager/      # custom rules, decoders, active response
+├── attacks/                # controlled attack and boundary tests
+├── capture/                # tshark capture helpers
+├── tests/                  # offline regression tests
+├── scripts/
+│   ├── nisec_correlate/    # deterministic + optional AI correlation
+│   └── nisec_report/       # deterministic + optional AI HTML reporting
+├── deploy-docker/          # alternate Wazuh deployment
+├── dvwa/                   # optional web target
+├── evidence/               # generated evidence and reports
+├── docs/                   # architecture, operations, analysis and report docs
+├── nisec-correlate-feature/# feature-specific implementation notes
+└── nisec-report-feature/   # feature-specific implementation notes
 ```
+
+Generated runtime state such as `.vagrant/` and AI cache files should not be treated as
+source documentation.
 
 ---
 
-## The core deliverable
+## Verification and reproducibility
 
-Everything in this repo exists to make one thing happen:
+Before claiming a detection works:
 
-> **Suricata detects it on the network → writes an alert to `eve.json` → the Wazuh agent reads that
-> file → the Wazuh server analyses it and shows it on the dashboard, right beside the host-based
-> alerts.**
+1. Run `make test` to prove the custom signature matches its fixture traffic offline.
+2. Run the live attack.
+3. Confirm the raw source event exists (`eve.json`, auth log, or FIM event).
+4. Confirm Wazuh received and indexed the event.
+5. Record the alert and timestamp with `make measure`.
+6. Use `make capture` when packet-level corroboration is needed.
+7. Preserve the resulting evidence and run `make seal`.
 
-That single sentence is your project. When you see a Suricata network alert sitting in the Wazuh
-dashboard next to an SSH brute-force alert, the system works — screenshot it, because it's the most
-important figure in your report.
-
----
-
-## Verification built in
-
-Two failure modes in this project are **silent** — nothing errors, the detection just never fires.
-Both are now checked automatically:
-
-- **Custom Suricata rules not loading.** Copying a `.rules` file next to the ruleset doesn't load
-  it; `suricata-update` regenerates that directory. The provisioner uses `suricata-update --local`
-  and then verifies the SIDs landed in the compiled ruleset. `.\nisec.ps1 healthcheck` and
-  `make healthcheck` re-check it.
-- **The test suite stopping early.** Several tools exit non-zero on their *expected* outcome (hydra
-  finding no password). The runner records each result and continues, then prints a summary.
-
-If `.\nisec.ps1 healthcheck` / `make healthcheck` is green, the lab is genuinely working — not
-just running. In budget mode, the `client` checks are expected to fail because that VM is off.
-DVWA is optional and only needs to be green if you are doing the bonus web attack.
+This separates **signature correctness** from **end-to-end pipeline correctness**.
 
 ---
 
-## Known issues & workarounds
+## Safety
 
-### VirtualBox Guest Additions version mismatch
+All attack scripts are intended for the isolated lab network and the project's own VMs.
+Do not point Nmap, Hydra, hping3, Nikto, or related tooling at systems you do not own or
+have explicit permission to test.
 
-If `vagrant up` prints:
+The malware/FIM test uses a harmless test fixture rather than real malware.
 
-```
-Guest Additions Version: 7.2.4
-VirtualBox Version: 7.1
-```
+---
 
-This is a version mismatch between the Guest Additions baked into the Vagrant box (7.2.x) and your
-installed VirtualBox (7.1.x). The VM boots fine. The only risk is shared folders (`/vagrant` inside
-the VM). Verify immediately:
+## Known issues
+
+### VirtualBox Guest Additions mismatch
+
+If Vagrant reports a Guest Additions / VirtualBox version mismatch, first check:
 
 ```bash
-# Inside any VM:
-ls /vagrant    # should list Makefile, scripts/, attacks/, etc.
+ls /vagrant
 ```
 
-If `/vagrant` is populated — ignore the warning, carry on. If you get a `vboxsf` mount error:
+If the shared folder is mounted correctly, the warning may not prevent the lab from working.
+See [`docs/runbook.md`](docs/runbook.md) for recovery options.
 
-| Fix | Command |
-|---|---|
-| **Upgrade VirtualBox to 7.2** *(recommended)* | Download from virtualbox.org, reinstall |
-| **Auto-sync with plugin** | `vagrant plugin install vagrant-vbguest` then `.\nisec.ps1 reload` |
-| **Downgrade GA inside VM** | `sudo apt-get install -y virtualbox-guest-utils=7.1.*` |
+### Indexer memory pressure
+
+The Wazuh Indexer is the largest VM resource consumer. On constrained hosts, use:
+
+```powershell
+.\nisec.ps1 up-budget
+```
+
+The budget mode omits the client VM. A failed client health check is therefore expected in
+that configuration.
 
 ---
 
-## Safety and legality
+## License / coursework note
 
-Everything runs on an **isolated host-only network** against **your own** VMs. That is legal and
-expected for this coursework. Never point these tools at machines you don't own or across the
-internet or your university network.
+This repository is a coursework implementation and laboratory environment. Add the license
+required by your course or institution if one is expected.

@@ -1,5 +1,8 @@
 # AI-Narrated HTML Security Report
 
+> **Current implementation:** `scripts/generate_html_report.py` and `scripts/nisec_report/`.
+> The report feature is optional and downstream of the Wazuh/Suricata evidence pipeline.
+
 Turns NISec's existing evidence (`measure`, `hunt`, `correlate`) into one
 self-contained HTML report: `evidence/report_<timestamp>.html`. Open it in
 any browser — no server, no internet, no JS framework required.

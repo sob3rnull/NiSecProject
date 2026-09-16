@@ -50,7 +50,10 @@ Mirror your proposal's numbered subsections exactly:
   alert lifecycle in `architecture.md`._
 - **4.5 Security controls** — intrusion detection, log collection, centralized monitoring,
   access control, alerting. _Point each at its implementing artefact._
-- **4.6 Expected architecture outcome** — _your paragraph._
+- **4.6 Analysis architecture** — _show how `measure`, `hunt`, `compare`, `score`, correlation,
+  and report generation consume existing evidence after detection._
+- **4.7 Expected architecture outcome** — _your paragraph. Keep the distinction between detection,
+  analysis, optional AI, and response explicit._
 
 ## 5. Implementation
 - **5.1 Environment setup** — VirtualBox + Vagrant, VM specs, network config.
@@ -89,8 +92,10 @@ One subsection per attack: objective → command → expected → observed → e
   and asserts each custom SID fires. Cite it as evidence the signatures were validated
   independently of the live pipeline, not just observed working once.
 - **6.11 Detection boundary** — **`make evasion`**. Report the technique → detected? → why table.
-  The slow-brute-force result (network signature evaded, host rule still catches it) is the
-  strongest single finding available here; give it its own paragraph.
+- **6.12 Threat hunting and correlation** — _use `make hunt` and, if included, `make correlate`.
+  Distinguish deterministic grouping from optional AI interpretation._
+- **6.13 Report generation** — _use `make report` and show that tables/charts come from evidence
+  while AI, when enabled, contributes narrative only._
 
 ## 7. Analysis and Discussion
 - **7.1 What worked** — _which detections were clean out of the box._
@@ -106,7 +111,9 @@ One subsection per attack: objective → command → expected → observed → e
   are a lab reproduction of a 1998 paper, which reframes the section from "what failed" to
   "what I replicated". Then the standing ones: single subnet, IDS not IPS, lab scale.
   The **residual risk** table in `risk-assessment.md` §3 quantifies what remains.
-- **7.5 Security recommendations** ⭐ — _proposal objective 6 explicitly promises this. Give
+- **7.5 Analysis pipeline discussion** — _explain what `compare`, `score`, correlation and the
+  HTML report add beyond raw dashboard screenshots._
+- **7.6 Security recommendations** ⭐ — _proposal objective 6 explicitly promises this. Give
   concrete recommendations: enforce key-based SSH, patch cadence, close unused ports, MFA on the
   dashboard, network segmentation. Tie each back to a vulnerability you listed in §3.6._
 

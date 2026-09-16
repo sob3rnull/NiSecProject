@@ -1,118 +1,412 @@
-# Architecture
+# NISec System Architecture
 
-The one-line story of the whole system:
+## 1. Purpose
 
-> **Suricata detects it on the network → writes an alert to `eve.json` → the Wazuh agent on that
-> machine reads the file → the Wazuh server analyses it and shows it on the dashboard, right next
-> to the host-based alerts.**
+NISec is a small, reproducible security-monitoring laboratory built around two complementary
+detection layers:
 
-## Zone model (proposal §3.3)
+- **Suricata** observes network traffic and generates network IDS events.
+- **Wazuh** collects endpoint telemetry, applies host-based rules, stores alerts, and presents
+  them centrally.
 
-The proposal defines four security zones. Here is how they map onto the lab:
+The design intentionally separates **detection**, **storage/presentation**, and **analysis**.
+Optional AI components consume existing evidence; they do not replace the sensors or alter raw
+alerts.
 
+---
+
+## 2. Logical architecture
+
+```mermaid
+flowchart LR
+    A["Kali<br/>192.168.56.10<br/>Attack/Test"] -->|controlled traffic| S["Monitored<br/>192.168.56.20"]
+    C["Client<br/>192.168.56.30<br/>Wazuh Agent"] -->|1514/1515| M["Wazuh Manager<br/>192.168.56.40"]
+    S --> N["Suricata"]
+    N -->|JSON alerts| E["/var/log/suricata/eve.json"]
+    E -->|Wazuh localfile| WA["Wazuh Agent"]
+    WA -->|1514/1515| M
+    M -->|indexed alerts| I["Wazuh Indexer"]
+    I --> D["Wazuh Dashboard :443"]
+    M -->|API :55000| API["Wazuh API"]
+    E --> P["tshark / Wireshark<br/>packet evidence"]
+    I --> H["Hunt / measurement scripts"]
+    H --> AC["AI correlation<br/>(optional)"]
+    H --> R["HTML report<br/>(optional)"]
 ```
-  +==================== Private Lab Network 192.168.56.0/24 ====================+
-  |                                                                             |
-  |  +--- ATTACK/TEST ZONE ---+          +------- MONITORING ZONE -------+       |
-  |  |  KALI          .10     |  attack  |  MONITORED         .20        |       |
-  |  |  nmap, hydra           |=========>|  Suricata IDS -> eve.json     |       |
-  |  |  hping3, nikto         |          |  Wazuh Agent + FIM            |       |
-  |  |  wireshark             |          |  tshark capture               |       |
-  |  +------------------------+          |  [bonus] DVWA (Docker :80)    |       |
-  |                                      +---------------+---------------+       |
-  |                                                      | agent traffic         |
-  |  +--- CLIENT ZONE --------+                          | 1514/1515 tcp         |
-  |  |  CLIENT        .30     |  agent traffic           v                       |
-  |  |  Wazuh Agent + FIM     |============> +---- MANAGEMENT ZONE -----------+   |
-  |  +------------------------+              |  WAZUH SERVER        .40      |   |
-  |                                          |  Manager  (rules+decoders)    |   |
-  |                              you browse  |  Indexer  (storage+search)    |   |
-  |                              https ----> |  Dashboard (:443)             |   |
-  |                                          +-------------------------------+   |
-  +=============================================================================+
+
+### Important interpretation
+
+The architecture has two independent evidence paths:
+
+1. **Network path:** packet → Suricata → `eve.json` → Wazuh Agent → Manager.
+2. **Host path:** authentication/FIM/SCA telemetry → Wazuh Agent → Manager.
+
+Both paths converge at the Wazuh Manager and are then stored/indexed and displayed centrally.
+This is why a host rule can still detect an attack when a network threshold is deliberately
+evaded.
+
+---
+
+## 3. Deployment topology
+
+```text
+192.168.56.0/24 — private host-only network
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                                                                               │
+│  ATTACK / TEST                  MONITORING                  MANAGEMENT        │
+│  ┌─────────────────┐            ┌───────────────────┐      ┌───────────────┐ │
+│  │ kali .10        │            │ monitored .20     │      │ wazuh .40     │ │
+│  │                 │            │                   │      │               │ │
+│  │ nmap            │──attack──>│ Suricata           │      │ Manager       │ │
+│  │ hydra           │            │ Wazuh Agent        │─────>│ Indexer       │ │
+│  │ hping3          │            │ FIM / SCA          │1514  │ Dashboard     │ │
+│  │ nikto           │            │ tshark             │1515  │ API           │ │
+│  └─────────────────┘            └───────────────────┘      └───────────────┘ │
+│                                         ▲                         ▲            │
+│                                         │                         │            │
+│                                  ┌──────┴──────┐                  │            │
+│                                  │ client .30  │──────────────────┘            │
+│                                  │ Wazuh Agent │                               │
+│                                  └─────────────┘                               │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
 
-| Zone | VM | IP | Purpose | Enforcement |
-|---|---|---|---|---|
-| Management | `wazuh-server` | `.40` | Wazuh server + dashboard access | ufw: 443/55000 limited; 9200 denied |
-| Monitoring | `monitored` | `.20` | Suricata IDS watching traffic | agent → manager only |
-| Client | `client` | `.30` | Machines sending logs to Wazuh | 1514/1515 outbound only |
-| Attack/Test | `kali` | `.10` | Pen-testing / attack simulation | host-only; no route off-lab |
+| VM | IP | Zone | CPUs | RAM | Main services |
+|---|---|---|---:|---:|---|
+| `wazuh-server` | `192.168.56.40` | Management | 2 | 6144 MB | Manager, Indexer, Dashboard |
+| `monitored` | `192.168.56.20` | Monitoring | 2 | 2048 MB | Suricata, Agent, FIM, tshark |
+| `client` | `192.168.56.30` | Client | 1 | 1536 MB | Agent, FIM |
+| `kali` | `192.168.56.10` | Attack/Test | 2 | 2048 MB | attack tooling |
 
-> **Documented limitation.** All four zones share one `/24` subnet, so separation is enforced by
-> **host firewall rules** (`scripts/harden-dashboard.sh`), not routed subnets or VLANs. On a
-> single-laptop lab this is a standard simplification. Production would place each zone on its own
-> VLAN with an enforcing firewall between them. Say this out loud in the viva before you're asked.
+These values are defined in `Vagrantfile`.
 
-## Components
+---
 
-| Component | Where | Job |
+## 4. Security-zone model and boundary
+
+The project uses four logical zones:
+
+| Zone | Purpose | Main trust assumption |
 |---|---|---|
-| Wazuh Manager | wazuh-server | Decodes + rule-matches incoming data, raises alerts |
-| Wazuh Indexer | wazuh-server | Stores + searches alerts (OpenSearch) |
-| Wazuh Dashboard | wazuh-server | Web UI for viewing alerts |
-| Wazuh Agent | monitored, client | Collects host logs, FIM, rootcheck; forwards encrypted |
-| Suricata | monitored | Network IDS; matches packets to signatures → `eve.json` |
-| tshark/Wireshark | monitored, kali | Packet-level evidence + detection debugging |
-| Docker | wazuh-server, monitored | Containerised Wazuh stack (alt) and DVWA (bonus) |
-| Attack tools | kali | nmap, hydra, hping3, nikto |
+| Management | central security infrastructure | administrative access only |
+| Monitoring | network and endpoint sensor | receives test traffic; forwards telemetry |
+| Client | ordinary monitored endpoint | sends endpoint telemetry |
+| Attack/Test | controlled adversarial activity | untrusted within the lab |
 
-> Your proposal names only the "Wazuh Manager". In the report, name **all three** server
-> components — Manager, Indexer, Dashboard. It's a small correction that reads as competence.
+### Deliberate limitation
 
-## The integration (core deliverable)
+All four VMs use the same host-only `/24`. Therefore this is **not equivalent to four
+production VLANs**. Isolation is primarily achieved through:
 
-Suricata and Wazuh are joined by **one file**: `/var/log/suricata/eve.json`.
+- private host-only networking,
+- service exposure,
+- Wazuh authentication,
+- firewall rules applied by the hardening script,
+- keeping the lab disconnected from external networks for attack traffic.
 
-1. Suricata writes JSON alerts to `eve.json`.
-2. The agent's `ossec.conf` has a `<localfile>` block (`config/wazuh-agent/ossec.conf.snippet`)
-   tailing that file as `json`.
-3. The agent ships each line to the Manager.
-4. The Manager's built-in JSON decoder parses the fields; our custom rules
-   (`config/wazuh-manager/local_rules.xml`, IDs 100100+) grade them by severity and category.
+A production architecture should use separate VLANs/subnets and an enforcing firewall between
+trust zones.
 
-## Alert lifecycle (the seven steps)
+---
 
-1. **Attack launched** from Kali.
-2. **Recorded** — the OS writes to `/var/log/auth.log`; Suricata writes to `eve.json`.
-3. **Collected** — the Wazuh agent tails both and forwards them encrypted.
-4. **Analysed** — the Manager decodes and rule-matches, assigning a severity.
-5. **Stored** — written to the Indexer for searching.
-6. **Displayed** — visible on the dashboard within seconds.
-7. **Responded** *(opt-in)* — active response blocks the attacking IP.
-   Implemented in `config/wazuh-manager/active-response.xml.snippet`; enable with
-   `make active-response`. Off by default because a control that writes firewall
-   DROP rules from log events should be switched on deliberately, not during a demo.
-   Steps 1–6 are the delivered system; step 7 is the loop being closed.
+## 5. Component responsibilities
 
-## Detection matrix
+### Wazuh Manager
 
-| Threat (from proposal) | Caught by | Rule / signature | Test script |
-|---|---|---|---|
-| Port scanning | Suricata | ET recon + SID 9000002 | `01_nmap_scan.sh` |
-| Brute-force login | Wazuh host rules | built-in 5710/5712 family | `02_ssh_bruteforce.sh` |
-| DoS attack | Suricata threshold | SID 9000001 | `03_ping_flood.sh` |
-| Malware / ransomware | Wazuh FIM + rootcheck | 100200, 100201, 100202 | `05_malware_fim_test.sh` |
-| Unauthorized access | Access control + auth rules | ufw + built-in auth rules | `06_unauthorized_access_test.sh` |
-| Misconfiguration | Wazuh SCA (built-in) | CIS benchmark module | Dashboard → SCA |
-| _Bonus:_ web attack | Suricata | ET web sigs → rule 100110 | `04_web_attack.sh` |
-| _Boundary:_ evasion | **deliberately not detected** | — | `07_evasion_test.sh` |
+The Manager is the central analysis point. It receives agent telemetry, decodes events,
+evaluates rules, and creates Wazuh alerts.
 
-The viva point: **network** threats are caught by **Suricata**, **host** threats by **Wazuh's own
-rules and FIM** — and both land in one dashboard. That contrast is the entire argument for the
-two-tool design.
+Relevant source configuration:
 
-`07_evasion_test.sh` turns that argument from an assertion into a measurement. A
-throttled SSH brute-force stays under the network signature's 20-connections-in-30s
-threshold and Suricata says nothing — while Wazuh's host rules alert anyway, because
-they count failed logins in `auth.log` rather than packets on the wire. One sensor
-misses exactly what the other catches. See `docs/attack-mapping.md` for how the
-coverage maps to ATT&CK, and where it does not.
+```text
+config/wazuh-manager/local_rules.xml
+config/wazuh-manager/local_decoder.xml
+```
 
-## Ports
+### Wazuh Indexer
 
-- `1514/tcp` — agent → manager data
-- `1515/tcp` — agent enrolment
-- `443/tcp` — dashboard
-- `55000/tcp` — Wazuh API
-- `9200/tcp` — indexer (localhost only; externally denied by design)
+The Indexer provides persistent searchable storage for Wazuh alert data. It is part of the
+server stack even though the coursework proposal primarily names the Wazuh Manager.
+
+### Wazuh Dashboard
+
+The Dashboard is the human-facing interface for alerts, agents, SCA findings, and other
+Wazuh data. It is exposed on TCP 443 in the lab.
+
+### Wazuh Agent
+
+Agents on `monitored` and `client` collect endpoint data. On `monitored`, the Agent also
+collects Suricata's JSON event stream.
+
+### Suricata
+
+Suricata is the network IDS. Its custom local rules are:
+
+| SID | Purpose |
+|---:|---|
+| `9000001` | ICMP flood threshold |
+| `9000002` | TCP SYN scan threshold |
+| `9000003` | repeated SSH connection threshold |
+
+The source rules live in `config/suricata/local.rules`.
+
+### Packet capture
+
+`tshark` captures raw packets for corroboration and debugging. A capture can answer a
+different question from an IDS alert: whether the traffic actually reached the sensor and
+what the packet-level behaviour looked like.
+
+---
+
+## 6. Suricata → Wazuh integration
+
+This is the core integration path:
+
+```text
+Kali traffic
+    │
+    ▼
+Suricata
+    │
+    ├── signature / threshold match
+    │
+    ▼
+/var/log/suricata/eve.json
+    │
+    │ Wazuh Agent localfile JSON reader
+    ▼
+Wazuh Manager
+    │
+    ├── JSON decoding
+    ├── built-in rules
+    └── local_rules.xml
+          ├── 100101+ Suricata severity rules
+          ├── 100120 custom-SID rule
+          └── 100200–100202 FIM/malware rules
+    │
+    ▼
+Wazuh Indexer
+    │
+    ▼
+Dashboard
+```
+
+The Agent integration is configured through `config/wazuh-agent/ossec.conf.snippet`.
+
+The manager's custom rules should be treated as a **translation/enrichment layer**:
+Suricata decides that a network signature fired; Wazuh assigns the event to the central
+alerting model and makes it searchable beside host alerts.
+
+---
+
+## 7. End-to-end alert lifecycle
+
+1. **Generate** — Kali launches a controlled test.
+2. **Observe** — Suricata sees network packets; Wazuh sees endpoint logs/FIM events.
+3. **Persist raw evidence** — Suricata writes `eve.json`; endpoint logs remain on the host.
+4. **Collect** — Wazuh Agent forwards telemetry to the Manager.
+5. **Decode and classify** — Manager decoders and rules produce Wazuh alerts.
+6. **Store** — Indexer stores alert documents for search and dashboard views.
+7. **Present** — Dashboard exposes the event to the analyst.
+8. **Measure** — scripts record detection rate and timing.
+9. **Corroborate** — packet captures or source logs can validate the event.
+10. **Analyse** — hunt/correlation/report tooling converts the evidence into higher-level
+    findings.
+11. **Respond (optional)** — active response can be enabled to block an attacking IP.
+
+The first seven stages form the normal monitoring pipeline. Stages 8–11 are evidence and
+response layers around that pipeline.
+
+---
+
+## 8. Detection architecture
+
+```mermaid
+flowchart TD
+    T["Controlled attack"] --> Q{"Where is the evidence?"}
+    Q -->|"Network packets"| S["Suricata"]
+    Q -->|"Host logs / FIM / SCA"| W["Wazuh Agent"]
+    S --> E["eve.json"]
+    E --> W
+    W --> M["Wazuh Manager"]
+    M --> R["Rules + decoders"]
+    R --> I["Wazuh Indexer"]
+    I --> D["Dashboard"]
+```
+
+The split is intentional:
+
+- Network signatures are useful for reconnaissance, floods, and protocol-level indicators.
+- Host rules are useful for authentication failures and endpoint state changes.
+- FIM detects file-system changes that a passive network sensor may not understand.
+- SCA checks configuration posture rather than individual network packets.
+
+---
+
+## 9. Analysis architecture
+
+Analysis begins **after** the detection pipeline:
+
+```mermaid
+flowchart LR
+    A["Wazuh alerts"] --> M["measure-detection.sh"]
+    A --> H["hunt.sh"]
+    M --> E["measurement evidence"]
+    H --> TH["threat-hunt evidence"]
+    E --> C["compare-runs.sh"]
+    E --> S["score-signatures.sh"]
+    E --> AC["correlate.py"]
+    TH --> AC
+    AC --> COR["attack-correlation_*.md"]
+    E --> HR["generate_html_report.py"]
+    TH --> HR
+    COR --> HR
+    HR --> HTML["report_*.html"]
+    E --> SEAL["seal-evidence.sh"]
+    TH --> SEAL
+    COR --> SEAL
+    HTML --> SEAL
+```
+
+### AI boundary
+
+`correlate.py` and `generate_html_report.py` are intentionally downstream of Wazuh.
+
+AI does **not**:
+
+- inspect raw network traffic directly,
+- replace Suricata signatures,
+- replace Wazuh rules,
+- modify `alerts.json`,
+- execute commands,
+- trigger active response,
+- generate the report's numerical measurements.
+
+The correlation pipeline first performs deterministic grouping and deduplication. Only
+eligible uncached multi-event groups may reach Gemini. The HTML report builds tables/charts
+deterministically and uses AI only for narrative text.
+
+---
+
+## 10. Data stores and evidence
+
+| Data / artefact | Location | Role |
+|---|---|---|
+| Suricata JSON | `/var/log/suricata/eve.json` | raw network IDS events |
+| Wazuh alerts | `/var/ossec/logs/alerts/alerts.json` | central alert evidence |
+| Wazuh service log | `/var/ossec/logs/ossec.log` | troubleshooting |
+| Suricata compiled rules | `/var/lib/suricata/rules/suricata.rules` | loaded IDS rules |
+| Packet captures | `evidence/pcaps/` | raw packet corroboration |
+| Attack logs | `evidence/logs/` | test execution evidence |
+| Measurement reports | `evidence/detection-results_*.md` | quantitative detection results |
+| Hunt reports | `evidence/threat-hunt_*.md` | analyst-style findings |
+| Correlation reports | `evidence/attack-correlation_*.md` | structured attack-chain analysis |
+| HTML reports | `evidence/report_*.html` | combined presentation |
+| AI cache | `evidence/ai-cache/` | repeat-call avoidance |
+| Integrity manifest | `evidence/` | SHA-256 evidence integrity check |
+
+---
+
+## 11. Network ports
+
+| Port | Direction / use | Exposure |
+|---:|---|---|
+| `22/tcp` | SSH administration | Vagrant forwarded host ports |
+| `1514/tcp` | Wazuh Agent → Manager | lab network |
+| `1515/tcp` | Wazuh agent enrolment | lab network |
+| `443/tcp` | Dashboard HTTPS | management access |
+| `55000/tcp` | Wazuh API | management access |
+| `9200/tcp` | Indexer | not intended for external exposure |
+
+Exact firewall behaviour is implemented by `scripts/harden-dashboard.sh`; do not infer
+production-grade segmentation from these ports alone.
+
+---
+
+## 12. Deployment variants
+
+### Native installer
+
+```text
+Ubuntu VM
+ ├── wazuh-manager (systemd)
+ ├── wazuh-indexer (systemd)
+ └── wazuh-dashboard (systemd)
+```
+
+This is the default Vagrant deployment.
+
+### Docker
+
+```text
+Ubuntu VM
+ └── Docker Compose
+      ├── Wazuh Manager
+      ├── Wazuh Indexer
+      └── Wazuh Dashboard
+```
+
+The alternative deployment is under `deploy-docker/`. Endpoint agents remain native on the
+monitored/client VMs.
+
+---
+
+## 13. Security controls
+
+| Control | Type | Implementation |
+|---|---|---|
+| Network IDS | Detective | Suricata + ET/local rules |
+| Host monitoring | Detective | Wazuh Agent + Manager rules |
+| File integrity | Detective | Wazuh FIM |
+| Configuration assessment | Detective | Wazuh SCA |
+| Dashboard access control | Preventive | UFW + Wazuh authentication/hardening |
+| Log retention | Preventive/administrative | `configure-retention.sh` |
+| Active blocking | Response | `active-response.xml.snippet`, opt-in |
+| Evidence integrity | Assurance | `seal-evidence.sh` |
+
+A key architectural distinction is that **detective controls do not automatically prevent the
+attack**. Active response and access-control hardening are separate controls.
+
+---
+
+## 14. Failure boundaries
+
+When a detection is missing, troubleshoot the chain in this order:
+
+```text
+Did the attack generate traffic/event?
+        ↓
+Did Suricata / Wazuh source record it?
+        ↓
+Did the Agent collect it?
+        ↓
+Did Manager decode it?
+        ↓
+Did a rule match?
+        ↓
+Was it indexed?
+        ↓
+Is Dashboard querying the correct data?
+```
+
+`make test` helps isolate **signature matching** from **live pipeline delivery**. Packet
+captures help isolate **traffic visibility** from **signature logic**.
+
+---
+
+## 15. Design limitations
+
+This architecture is intentionally a teaching/lab system.
+
+1. One host-only subnet is not production segmentation.
+2. Suricata is used primarily as IDS, not inline IPS.
+3. Threshold rules are rate-dependent and therefore can be evaded by slowing traffic.
+4. Source-based thresholds can be weakened by distributed/decoy sources.
+5. Passive IDS visibility is limited for encrypted application payloads.
+6. Four VMs are not representative of enterprise scale.
+7. AI analysis is optional and depends on the quality and completeness of upstream alerts.
+8. The evidence manifest provides tamper-evidence for the captured set, but a co-located
+   manifest is not equivalent to an independent trusted evidence repository.
+
+These limitations are part of the system's documented evaluation boundary.

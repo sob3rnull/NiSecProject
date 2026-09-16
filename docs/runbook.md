@@ -1,257 +1,487 @@
-# Runbook — Operations & Troubleshooting
+# Runbook — NISec Operations & Troubleshooting
 
-Day-to-day reference for a lab that's **already built**.
-
-> **Building it for the first time?** Use [`step-by-step-guide.md`](step-by-step-guide.md) instead.
-> This document assumes the lab exists and something needs checking, fixing, or re-running.
+This is the operational reference for a lab that has already been provisioned.
+For a first-time build, use [`step-by-step-guide.md`](step-by-step-guide.md).
 
 ---
 
-## Command reference
-
-On Windows, run these from PowerShell in the repo root. `nisec.ps1` is the preferred wrapper
-because it avoids PowerShell accidentally calling WSL `bash.exe` for host-side scripts.
+## 1. Command reference
 
 ### Lifecycle
 
 ```powershell
-.\nisec.ps1 up              # build/start the full 4-VM lab
-.\nisec.ps1 up-budget       # 3-VM lab (no client) for 8 GB hosts
-.\nisec.ps1 up-docker       # build with a containerised Wazuh stack
-.\nisec.ps1 halt            # stop all VMs (keeps state)
-.\nisec.ps1 destroy         # delete all VMs (irreversible)
-.\nisec.ps1 status          # what's running
-.\nisec.ps1 reload          # restart + re-provision
-.\nisec.ps1 provision       # re-run provisioners only (no restart)
+.\nisec.ps1 up
+.\nisec.ps1 up-budget
+.\nisec.ps1 up-docker
+.\nisec.ps1 status
+.\nisec.ps1 halt
+.\nisec.ps1 reload
+.\nisec.ps1 provision
+.\nisec.ps1 destroy
 ```
 
-### Operations
+### Core verification and testing
 
 ```powershell
-.\nisec.ps1 healthcheck     # verify connectivity + every service across the lab
-.\nisec.ps1 harden          # apply dashboard access-control hardening
+.\nisec.ps1 healthcheck
+.\nisec.ps1 test
+.\nisec.ps1 attacks
+.\nisec.ps1 malware-test
+.\nisec.ps1 capture
+.\nisec.ps1 evasion
+```
+
+### Evidence and analysis
+
+```powershell
+.\nisec.ps1 measure
+.\nisec.ps1 hunt
+.\nisec.ps1 compare
+.\nisec.ps1 score
+.\nisec.ps1 seal
+```
+
+### AI-assisted analysis
+
+```powershell
+.\nisec.ps1 correlate
+.\nisec.ps1 correlate-test
+.\nisec.ps1 correlate --dry-run
+
+.\nisec.ps1 report
+.\nisec.ps1 report-test
+.\nisec.ps1 report --dry-run
+```
+
+### Optional controls / bonus
+
+```powershell
+.\nisec.ps1 harden
 .\nisec.ps1 retention -IndexerPass '<admin password>'
-.\nisec.ps1 capture         # 60s packet capture on the monitored server
+.\nisec.ps1 active-response
+.\nisec.ps1 dvwa
 ```
 
-### Testing
+The equivalent `make` targets are listed by:
 
-```powershell
-.\nisec.ps1 test                # offline regression test for custom signatures
-.\nisec.ps1 attacks             # detection suite from Kali (tests 1,2,3,5)
-.\nisec.ps1 malware-test        # FIM/ransomware test (on monitored server)
-.\nisec.ps1 evasion             # detection boundary tests
-.\nisec.ps1 measure             # detection rate + latency table -> evidence/
-.\nisec.ps1 seal                # hash evidence/ into a manifest
-.\nisec.ps1 dvwa                # [bonus] start DVWA
+```bash
+make help
 ```
-
-For the bonus `BONUS=true` and `PAUSE=45` variants, use Git Bash with `make` or run the
-underlying Kali command directly with the environment variable set.
-
-### Shell access
-
-```powershell
-.\nisec.ps1 ssh-wazuh-server
-.\nisec.ps1 ssh-monitored
-.\nisec.ps1 ssh-client
-.\nisec.ps1 ssh-kali
-```
-
-If you are in Git Bash or Linux, the equivalent commands are still `make up`, `make status`,
-`make healthcheck`, `make attacks`, and so on.
 
 ---
 
-## Service management
+## 2. Recommended execution order
 
-### On the Wazuh server
+For a clean experimental run:
+
+```text
+up
+ ↓
+healthcheck
+ ↓
+test
+ ↓
+attacks + malware-test
+ ↓
+capture
+ ↓
+measure
+ ↓
+hunt
+ ↓
+evasion
+ ↓
+compare + score
+ ↓
+correlate
+ ↓
+report
+ ↓
+seal
+```
+
+Run `make test` before relying on a custom Suricata result. Run `make measure` only after the
+test traffic has been generated so that the measurement is tied to the intended run.
+
+---
+
+## 3. Service management
+
+### Wazuh server
 
 ```bash
 sudo systemctl status wazuh-manager wazuh-indexer wazuh-dashboard
 sudo systemctl restart wazuh-manager
 
-# logs
 sudo tail -f /var/ossec/logs/ossec.log
-sudo journalctl -u wazuh-indexer -f
+sudo tail -f /var/ossec/logs/alerts/alerts.log
 
-# list agents
 sudo /var/ossec/bin/agent_control -l
-
-# test a rule against a sample log line (extremely useful)
 sudo /var/ossec/bin/wazuh-logtest
 ```
 
-### On the monitored server
+### Monitored server
 
 ```bash
 sudo systemctl status suricata wazuh-agent
-sudo tail -f /var/log/suricata/eve.json | jq .        # live alerts, pretty
-sudo tail -f /var/ossec/logs/ossec.log                # agent log
-
-# test the Suricata config without restarting
+sudo tail -f /var/log/suricata/eve.json | jq .
+sudo tail -f /var/ossec/logs/ossec.log
 sudo suricata -T -c /etc/suricata/suricata.yaml
 ```
 
 ---
 
-## Troubleshooting by symptom
+## 4. Troubleshooting by pipeline stage
 
-### No alerts appear in the dashboard
+### A. No network alert
 
-Work backwards through the chain — the fault is always at one specific link:
-
-```bash
-# 1. Is Suricata seeing traffic at all?
-vagrant ssh monitored -c "sudo tail -5 /var/log/suricata/eve.json"
-
-# 2. Is the agent running and connected?
-vagrant ssh monitored -c "systemctl is-active wazuh-agent"
-vagrant ssh wazuh-server -c "sudo /var/ossec/bin/agent_control -l"
-
-# 3. Is the eve.json localfile block present?
-vagrant ssh monitored -c "sudo grep -A2 'suricata/eve.json' /var/ossec/etc/ossec.conf"
-
-# 4. Is the manager processing anything?
-vagrant ssh wazuh-server -c "sudo tail -20 /var/ossec/logs/alerts/alerts.log"
-```
-
-Whichever step is empty is your fault line.
-
-### Custom Suricata rules not firing (the ping flood especially)
-
-**The most common silent failure in this project.**
+Check traffic first:
 
 ```bash
-# Are our SIDs actually in the compiled ruleset?
-vagrant ssh monitored -c "sudo grep -c 'sid:900000' /var/lib/suricata/rules/suricata.rules"
-# expect 3; if 0:
-vagrant ssh monitored -c "sudo suricata-update --local /etc/suricata/rules/nisec-local.rules && sudo systemctl restart suricata"
+sudo tail -20 /var/log/suricata/eve.json
+ip -o -4 addr
 ```
 
-**Why this happens:** Suricata only loads files listed under `rule-files:` in `suricata.yaml`, and
-`suricata-update` regenerates that directory. Copying a `.rules` file alongside it does nothing.
-`--local` is the supported way to merge custom rules in. `.\nisec.ps1 healthcheck` / `make
-healthcheck` checks this for you.
-
-### Indexer won't start / everything crawls
-
-Nearly always RAM. The indexer is a JVM and is genuinely memory-hungry.
+Then verify Suricata's interface:
 
 ```bash
-vagrant ssh wazuh-server -c "free -h"
-vagrant ssh wazuh-server -c "sudo journalctl -u wazuh-indexer -n 50 --no-pager"
+grep -A5 'af-packet:' /etc/suricata/suricata.yaml
 ```
 
-Fixes, in order of preference: raise the VM's memory in the `Vagrantfile` (6–8 GB), or run
-`.\nisec.ps1 up-budget` / `make up-budget` to drop the client VM and free ~1.5 GB.
+The interface must be the one carrying the `192.168.56.x` traffic.
 
-On a 16 GB Windows host, it is normal to keep `client` powered off while learning the lab. That
-makes the `client agent` healthcheck fail, but the core Wazuh + Suricata detection path can still
-be valid.
-
-### Suricata sees no traffic
-
-Wrong interface — it's sniffing the NAT adapter instead of the host-only one.
+Then verify the custom rules are loaded:
 
 ```bash
-vagrant ssh monitored -c "ip -o -4 addr"                    # find the 192.168.56.x NIC
-vagrant ssh monitored -c "grep -A3 af-packet: /etc/suricata/suricata.yaml"
+sudo grep -c 'sid:900000' /var/lib/suricata/rules/suricata.rules
 ```
 
-The interface under `af-packet:` must match. Fix and `sudo systemctl restart suricata`.
+Expected: `3`.
 
-### Agent shows Disconnected / Never connected
+If they are missing:
 
 ```bash
-vagrant ssh monitored -c "nc -zv 192.168.56.40 1514"   # can it reach the manager?
-vagrant ssh monitored -c "sudo /var/ossec/bin/agent-auth -m 192.168.56.40"   # re-register
-vagrant ssh monitored -c "sudo systemctl restart wazuh-agent"
+sudo suricata-update --local /etc/suricata/rules/nisec-local.rules
+sudo systemctl restart suricata
 ```
 
-If the firewall is the culprit, confirm 1514/1515 are allowed:
-`vagrant ssh wazuh-server -c "sudo ufw status"`
-
-### Locked out of the dashboard
+Finally run:
 
 ```bash
-vagrant ssh wazuh-server
-sudo /usr/share/wazuh-indexer/plugins/opensearch-security/tools/wazuh-passwords-tool.sh \
-  -u admin -p 'NewStrongPassword123!'
-sudo systemctl restart wazuh-dashboard
+make test
 ```
 
-### Docker stack won't start
-
-```bash
-cd deploy-docker
-sudo docker compose logs wazuh.indexer | tail -40
-```
-
-| Error | Cause | Fix |
-|---|---|---|
-| `INDEXER_PASSWORD must be set` | No `.env`, or still `CHANGE_ME` | `rm .env && ./up.sh` to auto-generate strong credentials |
-| `MISSING CERTIFICATES` | Certs not generated | Follow the exact instructions the script prints |
-| Indexer exits immediately | `vm.max_map_count` too low | `sudo sysctl -w vm.max_map_count=262144` |
-| Port 443 in use | Something else has it | Change the dashboard port mapping in `docker-compose.yml` |
-
-### Hydra "finds nothing"
-
-That's the expected outcome and not a problem. The **failed** attempts are what trip the
-brute-force rule — you don't need a successful login. Hydra exiting non-zero here is normal; the
-test runner accounts for it and continues.
+If offline rule replay passes but live traffic fails, the problem is likely visibility,
+interface configuration, threshold conditions, or downstream collection—not the signature
+itself.
 
 ---
 
-## Health check reference
+### B. Suricata alert exists but Wazuh does not show it
+
+Check:
+
+```bash
+sudo grep -A4 'suricata/eve.json' /var/ossec/etc/ossec.conf
+sudo systemctl status wazuh-agent
+sudo /var/ossec/bin/agent_control -l
+```
+
+Then inspect the Manager:
+
+```bash
+sudo tail -50 /var/ossec/logs/alerts/alerts.log
+sudo tail -50 /var/ossec/logs/ossec.log
+```
+
+The intended path is:
+
+```text
+eve.json → Wazuh Agent → 1514/tcp → Manager → rule → Indexer → Dashboard
+```
+
+---
+
+### C. Agent is disconnected
+
+From the agent host:
+
+```bash
+nc -zv 192.168.56.40 1514
+nc -zv 192.168.56.40 1515
+sudo systemctl status wazuh-agent
+```
+
+On the server:
+
+```bash
+sudo /var/ossec/bin/agent_control -l
+sudo ufw status
+```
+
+If re-enrolment is necessary:
+
+```bash
+sudo /var/ossec/bin/agent-auth -m 192.168.56.40
+sudo systemctl restart wazuh-agent
+```
+
+---
+
+### D. Indexer is slow or fails to start
+
+Inspect memory:
+
+```bash
+free -h
+sudo journalctl -u wazuh-indexer -n 50 --no-pager
+```
+
+The Indexer is memory intensive. On an 8 GB host use:
 
 ```powershell
-.\nisec.ps1 healthcheck
+.\nisec.ps1 up-budget
 ```
 
-Verifies: reachability of all four IPs · Wazuh manager/indexer/dashboard active · both agents
-active · Suricata active · `eve.json` non-empty · **custom SIDs loaded** · DVWA responding ·
-attack tools present on Kali.
-
-Expected red items in partial/budget runs:
-
-- `client agent` when the `client` VM is powered off.
-- `DVWA not up` unless you deliberately started the optional vulnerable web app.
-
-Anything marked `[fail]` maps to a section above.
+Budget mode intentionally omits the `client` VM.
 
 ---
 
-## Where things live
+### E. Dashboard authentication problems
 
-| What | Path |
-|---|---|
-| Agent config | `/var/ossec/etc/ossec.conf` |
-| Manager custom rules | `/var/ossec/etc/rules/local_rules.xml` |
-| Manager alert log | `/var/ossec/logs/alerts/alerts.log` |
-| Wazuh service log | `/var/ossec/logs/ossec.log` |
-| Suricata config | `/etc/suricata/suricata.yaml` |
-| Suricata custom rules (source) | `/etc/suricata/rules/nisec-local.rules` |
-| Suricata compiled ruleset | `/var/lib/suricata/rules/suricata.rules` |
-| Suricata alerts | `/var/log/suricata/eve.json` |
-| Repo inside every VM | `/vagrant` |
-| Your evidence | `evidence/{screenshots,logs,pcaps}/` |
+The lab dashboard is:
 
----
+```text
+https://192.168.56.40
+```
 
-## Resetting
+Retrieve the generated credentials:
 
 ```bash
-# re-run one machine's provisioning
-vagrant provision monitored
-
-# rebuild a single VM from scratch
-vagrant destroy -f monitored && vagrant up monitored
-
-# nuclear option
-.\nisec.ps1 destroy
-.\nisec.ps1 up
+sudo tar -O -xf wazuh-install-files.tar \
+  wazuh-install-files/wazuh-passwords.txt | grep -A1 admin
 ```
 
-> Before destroying anything, copy `evidence/` somewhere safe. Screenshots and logs are your
-> marks — the VMs are replaceable.
+If the password must be reset, use the Wazuh password-management tooling installed by the
+current Wazuh deployment and restart the affected service.
+
+Do not put passwords into source control, `.env` files committed to Git, or documentation.
+
+---
+
+## 5. Measurement troubleshooting
+
+`measure` is intended to produce evidence, not merely a count of alerts.
+
+If a row is `NOT DETECTED`:
+
+1. Check whether the source event exists.
+2. Check the event timestamp.
+3. Check whether the expected rule/SID is loaded.
+4. Check whether the attack actually crossed the relevant threshold.
+5. Do not replace `NOT DETECTED` with a guessed value.
+
+For latency comparisons, keep the same lab configuration and measurement method between runs.
+Use `compare` after several measurement files exist.
+
+---
+
+## 6. Packet capture troubleshooting
+
+Start a capture while the attack is running:
+
+```powershell
+.\nisec.ps1 capture
+```
+
+Or from the monitored VM:
+
+```bash
+sudo bash /vagrant/capture/capture.sh 60
+```
+
+Useful filters:
+
+| Purpose | Wireshark filter |
+|---|---|
+| SYN scan | `tcp.flags.syn == 1 && tcp.flags.ack == 0` |
+| SYN/ACK responses | `tcp.flags.syn == 1 && tcp.flags.ack == 1` |
+| ICMP echo | `icmp.type == 8` |
+| SSH | `tcp.port == 22` |
+| Kali source | `ip.src == 192.168.56.10` |
+| HTTP | `http.request` |
+
+---
+
+## 7. AI correlation troubleshooting
+
+Safe default:
+
+```powershell
+.\nisec.ps1 correlate
+```
+
+This uses mock mode and makes no external API call.
+
+For offline input:
+
+```powershell
+python scripts/correlate.py --mock --from-file evidence/sample-alerts.json
+```
+
+For a zero-network preview:
+
+```powershell
+python scripts/correlate.py --dry-run --from-file evidence/sample-alerts.json
+```
+
+Real Gemini mode is explicit:
+
+```powershell
+$env:GEMINI_API_KEY = "..."
+$env:AI_CORRELATION_MODE = "gemini"
+.\nisec.ps1 correlate
+```
+
+Important controls:
+
+- deterministic grouping occurs before AI;
+- isolated single alerts are skipped;
+- cached candidate groups do not require another call;
+- `--dry-run` makes no API call;
+- `GEMINI_MAX_REQUESTS_PER_RUN` is enforced.
+
+See [`ai-correlation.md`](ai-correlation.md).
+
+---
+
+## 8. HTML report troubleshooting
+
+Run the deterministic test suite first:
+
+```powershell
+.\nisec.ps1 report-test
+```
+
+Generate without AI:
+
+```powershell
+.\nisec.ps1 report
+```
+
+Inspect the result under:
+
+```text
+evidence/report_*.html
+```
+
+If Gemini is unavailable, the deterministic tables/charts should still render. AI-generated
+narrative may fall back to clearly labelled text.
+
+---
+
+## 9. Active response
+
+Active response is opt-in:
+
+```powershell
+.\nisec.ps1 active-response
+```
+
+Enable it only after detection evidence has been captured.
+
+Why: it changes the lab from **detect-only** to **detect + automatic block**, which can alter
+subsequent measurement results and may block the attacker VM.
+
+If evaluating active response experimentally, record:
+
+1. attack start time;
+2. detection time;
+3. block time;
+4. whether subsequent packets were dropped;
+5. whether the allowlist/whitelist behaved as intended.
+
+---
+
+## 10. Docker troubleshooting
+
+From `deploy-docker/`:
+
+```bash
+./up.sh
+docker compose ps
+docker compose logs wazuh.indexer
+docker compose logs wazuh.manager
+docker compose logs wazuh.dashboard
+```
+
+Common causes:
+
+| Symptom | Likely cause |
+|---|---|
+| Indexer exits immediately | insufficient `vm.max_map_count` or memory |
+| Certificate error | generated certificates/configuration missing |
+| Authentication error | indexer password/hash mismatch |
+| Port 443 conflict | another service owns the host port |
+| Dashboard unavailable | indexer/manager not healthy yet |
+
+See [`deploy-docker/README.md`](../deploy-docker/README.md).
+
+---
+
+## 11. Healthcheck interpretation
+
+Expected healthy state:
+
+- Wazuh server reachable;
+- Manager, Indexer, Dashboard active;
+- monitored Agent active;
+- client Agent active in full mode;
+- Suricata active;
+- `eve.json` exists/has data;
+- custom SIDs loaded;
+- Kali attack tooling available.
+
+Expected exceptions:
+
+- `client` is absent in `up-budget` mode;
+- DVWA is absent unless the bonus target was started.
+
+A healthcheck failure should be investigated before interpreting detection measurements.
+
+---
+
+## 12. Evidence integrity
+
+Before final submission:
+
+```powershell
+.\nisec.ps1 seal
+```
+
+Preserve:
+
+- screenshots,
+- logs,
+- packet captures,
+- measurement reports,
+- threat-hunt reports,
+- correlation reports,
+- HTML reports.
+
+The SHA-256 manifest demonstrates whether the recorded files changed after sealing. It does
+not establish an independent chain of custody when the manifest is stored beside the files.
+
+---
+
+## 13. Destructive operations
+
+Before:
+
+```powershell
+.\nisec.ps1 destroy
+```
+
+copy the `evidence/` directory somewhere safe.
+
+The VMs are reproducible. Your captured evidence is not.
