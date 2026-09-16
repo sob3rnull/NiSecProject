@@ -58,14 +58,12 @@ function Show-Help {
     Write-Host "  healthcheck, test, measure, seal, harden, retention, attacks,"
     Write-Host "  malware-test, evasion, active-response, capture, dvwa, ssh-<vmname>"
     Write-Host "  --- Analysis pipeline (run after 'measure') ---"
-    Write-Host "  hunt         Threat Hunt Report from live alerts.json -> evidence/"
-    Write-Host "  compare      Latency Drift Report across all measure runs -> evidence/"
-    Write-Host "  score        Signature Confidence Scores across all measure runs -> evidence/"
-    Write-Host "  report       AI-narrated HTML report (charts+tables+Gemini, mock by default) -> evidence/"
-    Write-Host "               --dry-run  --mock  --force"
-    Write-Host "  report-basic Charts/tables only, no AI, no Python needed (bash) -> evidence/"
-    Write-Host "  correlate    AI-assisted attack chain correlation (mock by default). Flags:"
-    Write-Host "               --dry-run  --mock  --force  --hours N  --from-file <path>"
+    Write-Host "  hunt      Threat Hunt Report from live alerts.json -> evidence/"
+    Write-Host "  compare   Latency Drift Report across all measure runs -> evidence/"
+    Write-Host "  score     Signature Confidence Scores across all measure runs -> evidence/"
+    Write-Host "  report    Executive HTML report with charts (from measure/hunt/compare/score) -> evidence/"
+    Write-Host "  correlate AI-assisted attack chain correlation (mock by default). Flags:"
+    Write-Host "            --dry-run  --mock  --force  --hours N  --from-file <path>"
 }
 
 switch -Regex ($Target) {
@@ -105,26 +103,17 @@ switch -Regex ($Target) {
         vagrant ssh $vmName
     }
 
-    "^(healthcheck|test|measure|seal|hunt|compare|score|report-basic)$" {
+    "^(healthcheck|test|measure|seal|hunt|compare|score|report)$" {
         switch ($Target) {
-            "healthcheck"   { Invoke-HostBashScript "scripts/healthcheck.sh" }
-            "test"          { Invoke-HostBashScript "tests/test-rules.sh" }
-            "measure"       { Invoke-HostBashScript "scripts/measure-detection.sh" }
-            "seal"          { Invoke-HostBashScript "scripts/seal-evidence.sh" }
-            "hunt"          { Invoke-HostBashScript "scripts/hunt.sh" }
-            "compare"       { Invoke-HostBashScript "scripts/compare-runs.sh" }
-            "score"         { Invoke-HostBashScript "scripts/score-signatures.sh" }
-            "report-basic"  { Invoke-HostBashScript "scripts/generate-report.sh" }
+            "healthcheck" { Invoke-HostBashScript "scripts/healthcheck.sh" }
+            "test"        { Invoke-HostBashScript "tests/test-rules.sh" }
+            "measure"     { Invoke-HostBashScript "scripts/measure-detection.sh" }
+            "seal"        { Invoke-HostBashScript "scripts/seal-evidence.sh" }
+            "hunt"        { Invoke-HostBashScript "scripts/hunt.sh" }
+            "compare"     { Invoke-HostBashScript "scripts/compare-runs.sh" }
+            "score"       { Invoke-HostBashScript "scripts/score-signatures.sh" }
+            "report"      { Invoke-HostBashScript "scripts/generate-report.sh" }
         }
-    }
-
-    "^report$" {
-        # Pure Python — no Git Bash needed.
-        python scripts/generate_html_report.py @Rest
-    }
-
-    "^report-test$" {
-        python -m unittest tests.test_report -v
     }
 
     "^correlate$" {

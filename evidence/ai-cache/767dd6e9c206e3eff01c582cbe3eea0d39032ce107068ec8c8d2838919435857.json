@@ -1,0 +1,74 @@
+{
+  "fingerprint": "767dd6e9c206e3eff01c582cbe3eea0d39032ce107068ec8c8d2838919435857",
+  "model": "gemini-2.5-flash-lite",
+  "prompt_version": "1.0",
+  "timestamp": "2026-09-16 12:53:24",
+  "result": {
+    "is_correlated": true,
+    "confidence": 0.8,
+    "attack_chain": [
+      {
+        "stage": "Reconnaissance",
+        "event_ids": [
+          "evt0",
+          "evt1"
+        ],
+        "confidence": 0.9
+      },
+      {
+        "stage": "Initial Access",
+        "event_ids": [
+          "evt2",
+          "evt3"
+        ],
+        "confidence": 0.7
+      }
+    ],
+    "relationships": [
+      {
+        "from_event": "evt0",
+        "to_event": "evt1",
+        "relationship": "precedes",
+        "confidence": 0.9,
+        "reason": "evt0 (SSH scan) occurred before evt1 (port scan) from the same source IP to the same destination IP."
+      },
+      {
+        "from_event": "evt1",
+        "to_event": "evt2",
+        "relationship": "precedes",
+        "confidence": 0.8,
+        "reason": "evt1 (port scan) occurred before evt2 (authentication failed) from the same source IP to the same destination IP."
+      },
+      {
+        "from_event": "evt2",
+        "to_event": "evt3",
+        "relationship": "precedes",
+        "confidence": 0.9,
+        "reason": "evt2 (authentication failed) occurred before evt3 (authentication failed) from the same source IP to the same destination IP."
+      }
+    ],
+    "mitre_attack": [
+      {
+        "technique": "T1046 - Network Service Scanning",
+        "event_ids": [
+          "evt0",
+          "evt1"
+        ],
+        "confidence": 0.9
+      },
+      {
+        "technique": "T1110 - Brute Force",
+        "event_ids": [
+          "evt2",
+          "evt3"
+        ],
+        "confidence": 0.7
+      }
+    ],
+    "uncertainties": [
+      "The specific ports scanned in evt0 and evt1 are not fully detailed, only that they are SSH and HTTP respectively.",
+      "The exact credentials attempted in evt2 and evt3 are not provided, only that authentication failed.",
+      "The success or failure of any subsequent actions after the failed authentication attempts is unknown."
+    ]
+  }
+}

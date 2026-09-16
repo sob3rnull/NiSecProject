@@ -3,8 +3,7 @@ SHELL := /bin/bash
 
 .PHONY: help up up-budget up-docker halt destroy status reload provision \
         healthcheck harden retention attacks malware-test capture dvwa ssh-% \
-        test measure evasion active-response seal hunt compare score \
-        report correlate correlate-dry correlate-test
+        test measure evasion active-response seal hunt compare score
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_%-]+:.*?## .*$$' $(MAKEFILE_LIST) | \

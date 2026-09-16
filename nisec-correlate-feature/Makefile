@@ -3,8 +3,7 @@ SHELL := /bin/bash
 
 .PHONY: help up up-budget up-docker halt destroy status reload provision \
         healthcheck harden retention attacks malware-test capture dvwa ssh-% \
-        test measure evasion active-response seal hunt compare score \
-        report correlate correlate-dry correlate-test
+        test measure evasion active-response seal hunt compare score
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_%-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -89,17 +88,8 @@ compare:       ## Latency Drift Report — compare detection speed across measur
 score:         ## Confidence Score — rate each rule's reliability across measure runs -> evidence/
 	bash scripts/score-signatures.sh
 
-report:        ## AI-narrated HTML Security Report (charts + tables + Gemini narrative, mock by default) -> evidence/
-	python3 scripts/generate_html_report.py
-
-report-dry:    ## Show what report would send to Gemini, without calling it
-	python3 scripts/generate_html_report.py --dry-run
-
-report-basic:  ## Charts/tables only, no AI, no Python dependency (original bash generator) -> evidence/
+report:        ## Executive HTML Security Report with charts, built from measure/hunt/compare/score -> evidence/
 	bash scripts/generate-report.sh
-
-report-test:   ## Offline unit tests for the report generator — no network, no API key needed
-	python3 -m unittest tests.test_report -v
 
 correlate:     ## AI-assisted attack chain correlation (mock by default, zero API cost) -> evidence/
 	python3 scripts/correlate.py

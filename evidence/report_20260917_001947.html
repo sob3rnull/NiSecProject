@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<title>NISec-20260917-001941 — NISec Security Report</title>
+<style>
+    :root { color-scheme: dark; }
+    body { background:#14161b; color:#e6e8eb; font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0; }
+    .wrap { max-width:980px; margin:0 auto; padding:36px 22px 80px; }
+    header { border-bottom:1px solid #2a2e37; padding-bottom:22px; margin-bottom:28px; }
+    header h1 { margin:0 0 4px; font-size:24px; }
+    header .sub { color:#9aa2b1; font-size:13px; }
+    .meta-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin-top:16px; }
+    .meta-card { background:#1c1f28; border:1px solid #2a2e37; border-radius:8px; padding:10px 14px; font-size:12px; }
+    .meta-card b { display:block; font-size:14px; color:#fff; }
+    section { margin:36px 0; }
+    h2 { font-size:17px; border-left:4px solid #4fd1c5; padding-left:10px; }
+    .chart { width:100%; height:auto; display:block; }
+    .chart .barlabel { fill:#c7cdd8; font-size:13px; }
+    .chart .barvalue { fill:#ffffff; font-size:13px; font-weight:600; }
+    table { width:100%; border-collapse:collapse; font-size:13px; margin-top:10px; }
+    th,td { text-align:left; padding:7px 9px; border-bottom:1px solid #2a2e37; }
+    th { color:#9aa2b1; text-transform:uppercase; font-size:11px; }
+    .pill { padding:2px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+    .pill-high{background:#3a1616;color:#f87171;} .pill-med{background:#3a3216;color:#facc15;} .pill-low{background:#16382e;color:#4ade80;}
+    .chain { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:10px; }
+    .chain .stage { background:#1c1f28; border:1px solid #4fd1c5; color:#4fd1c5; padding:6px 12px; border-radius:8px; font-size:13px; }
+    .chain .arrow { color:#6b7280; }
+    .ai-text { background:#1c1f28; border-left:3px solid #818cf8; padding:12px 16px; border-radius:0 8px 8px 0; }
+    .ai-note { color:#f87171; font-size:12px; margin-bottom:6px; }
+    .muted { color:#6b7280; font-size:13px; }
+    ul.findings li { margin-bottom:6px; }
+    footer { border-top:1px solid #2a2e37; margin-top:44px; padding-top:16px; color:#6b7280; font-size:11px; }
+    </style></head>
+<body><div class="wrap">
+
+<header>
+  <div class="sub">NISec — Centralized Security Monitoring System</div>
+  <h1>Security Incident Report <span class="pill pill-high">HIGH</span></h1>
+  <div class="sub">Report ID: NISec-20260917-001941 &nbsp;•&nbsp; Generated: 2026-09-17 00:19:41</div>
+  <div class="meta-grid">
+    <div class="meta-card"><b>HIGH</b>Severity</div>
+    <div class="meta-card"><b>458</b>Total alerts</div>
+    <div class="meta-card"><b>6.25s</b>Avg. latency</div>
+    <div class="meta-card"><b>gemini-2.5-flash-lite</b>AI model</div>
+    <div class="meta-card"><b>ok</b>AI status</div>
+    <div class="meta-card"><b>stored</b>AI cache</div>
+    </div>
+</header>
+
+<section><h2>Executive Summary</h2><p class="ai-text">A high-severity incident was observed between 2026-09-15T20:09:27 and 2026-09-15T20:25:24, involving source IP 10.0.2.2 targeting the &#x27;monitored&#x27; and &#x27;wazuh-server&#x27; hosts. The incident generated a total of 458 alerts, with a detection latency of 6.25 seconds.</p></section>
+
+<section><h2>Incident Overview</h2>
+  <table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody><tr><td>Severity</td><td>HIGH</td></tr><tr><td>First observed</td><td>2026-09-15T20:09:27 </td></tr><tr><td>Last observed</td><td>2026-09-15T20:25:24 </td></tr><tr><td>Source IP(s)</td><td>10.0.2.2</td></tr><tr><td>Target host(s)</td><td>monitored, wazuh-server</td></tr><tr><td>Total alerts</td><td>458</td></tr><tr><td>Detection latency (avg)</td><td>6.25s</td></tr></tbody></table>
+  <p class="ai-text">The incident involved multiple detection events spanning Reconnaissance, Credential Access, and Impact tactics. The primary source IP was 10.0.2.2, and the target hosts included &#x27;monitored&#x27; and &#x27;wazuh-server&#x27;. The incident was active for approximately 16 minutes.</p>
+</section>
+
+<section><h2>Attack Chain</h2>
+  <div class="chain"><span class="stage">Reconnaissance (0.9)</span></div>
+  <p class="ai-text">The attack chain analysis indicates a high confidence (0.9) that the &#x27;Reconnaissance&#x27; stage occurred, supported by events evt0 and evt1. The subsequent stages are inferred from the MITRE ATT&amp;CK mapping and detection results.</p>
+</section>
+
+<section><h2>Attack Narrative</h2><p class="ai-text">The observed activity suggests a multi-stage attack. Initial reconnaissance was detected, followed by attempts at credential access, specifically brute force password guessing against SSH. Further alerts indicate potential ingress tool transfer, compromise of host software binaries, and file integrity violations, culminating in alerts related to data encryption for impact (ransomware-like behavior).</p></section>
+
+<section><h2>Timeline</h2>
+  <table><thead><tr><th>Timestamp</th><th>Source</th><th>Rule ID</th><th>Agent</th><th>Description</th></tr></thead><tbody><tr><td>2026-09-15T20:09:27 </td><td>wazuh</td><td>533</td><td>wazuh-server</td><td>Listened ports status (netstat) changed (new port opened or closed).</td></tr><tr><td>2026-09-15T20:09:36 </td><td>wazuh</td><td>502</td><td>wazuh-server</td><td>Wazuh server started.</td></tr><tr><td>2026-09-15T20:15:27 </td><td>wazuh</td><td>533</td><td>wazuh-server</td><td>Listened ports status (netstat) changed (new port opened or closed).</td></tr><tr><td>2026-09-15T20:19:07 </td><td>wazuh</td><td>5502</td><td>wazuh-server</td><td>PAM: Login session closed.</td></tr><tr><td>2026-09-15T20:19:18 </td><td>wazuh</td><td>5502</td><td>wazuh-server</td><td>PAM: Login session closed.</td></tr><tr><td>2026-09-15T20:19:30 </td><td>wazuh</td><td>503</td><td>monitored</td><td>Wazuh agent started.</td></tr><tr><td>2026-09-15T20:19:35 </td><td>wazuh</td><td>533</td><td>monitored</td><td>Listened ports status (netstat) changed (new port opened or closed).</td></tr><tr><td>2026-09-15T20:20:43 </td><td>wazuh</td><td>5104</td><td>monitored</td><td>Interface entered in promiscuous(sniffing) mode.</td></tr><tr><td>2026-09-15T20:21:19 </td><td>wazuh</td><td>5715</td><td>monitored</td><td>sshd: authentication success.</td></tr><tr><td>2026-09-15T20:21:19 </td><td>wazuh</td><td>5501</td><td>monitored</td><td>PAM: Login session opened.</td></tr><tr><td>2026-09-15T20:21:19 </td><td>wazuh</td><td>5501</td><td>monitored</td><td>PAM: Login session opened.</td></tr><tr><td>2026-09-15T20:21:21 </td><td>wazuh</td><td>5402</td><td>monitored</td><td>Successful sudo to ROOT executed.</td></tr><tr><td>2026-09-15T20:21:21 </td><td>wazuh</td><td>5501</td><td>monitored</td><td>PAM: Login session opened.</td></tr><tr><td>2026-09-15T20:21:21 </td><td>wazuh</td><td>5502</td><td>monitored</td><td>PAM: Login session closed.</td></tr><tr><td>2026-09-15T20:21:21 </td><td>wazuh</td><td>5402</td><td>monitored</td><td>Successful sudo to ROOT executed.</td></tr><tr><td>2026-09-15T20:21:21 </td><td>wazuh</td><td>5501</td><td>monitored</td><td>PAM: Login session opened.</td></tr><tr><td>2026-09-15T20:21:21 </td><td>wazuh</td><td>5502</td><td>monitored</td><td>PAM: Login session closed.</td></tr><tr><td>2026-09-15T20:21:21 </td><td>wazuh</td><td>5502</td><td>monitored</td><td>PAM: Login session closed.</td></tr><tr><td>2026-09-15T20:21:22 </td><td>wazuh</td><td>5502</td><td>monitored</td><td>PAM: Login session closed.</td></tr><tr><td>2026-09-15T20:21:22 </td><td>wazuh</td><td>506</td><td>monitored</td><td>Wazuh agent stopped.</td></tr><tr><td>2026-09-15T20:21:28 </td><td>wazuh</td><td>5501</td><td>wazuh-server</td><td>PAM: Login session opened.</td></tr><tr><td>2026-09-15T20:21:28 </td><td>wazuh</td><td>5501</td><td>wazuh-server</td><td>PAM: Login session opened.</td></tr><tr><td>2026-09-15T20:21:28 </td><td>wazuh</td><td>5715</td><td>wazuh-server</td><td>sshd: authentication success.</td></tr><tr><td>2026-09-15T20:24:04 </td><td>wazuh</td><td>533</td><td>wazuh-server</td><td>Listened ports status (netstat) changed (new port opened or closed).</td></tr><tr><td>2026-09-15T20:24:13 </td><td>wazuh</td><td>502</td><td>wazuh-server</td><td>Wazuh server started.</td></tr><tr><td>2026-09-15T20:25:15 </td><td>wazuh</td><td>503</td><td>monitored</td><td>Wazuh agent started.</td></tr><tr><td>2026-09-15T20:25:22 </td><td>wazuh</td><td>533</td><td>monitored</td><td>Listened ports status (netstat) changed (new port opened or closed).</td></tr><tr><td>2026-09-15T20:25:24 </td><td>wazuh</td><td>5402</td><td>monitored</td><td>Successful sudo to ROOT executed.</td></tr><tr><td>2026-09-15T20:25:24 </td><td>wazuh</td><td>5501</td><td>monitored</td><td>PAM: Login session opened.</td></tr><tr><td>2026-09-15T20:25:24 </td><td>wazuh</td><td>5502</td><td>monitored</td><td>PAM: Login session closed.</td></tr></tbody></table>
+  <p class="muted">Showing up to 30 events. Full data remains in alerts.json on the manager.</p>
+</section>
+
+<section><h2>Detection Summary</h2>
+  <table><thead><tr><th>Test</th><th>Result</th><th>Rule</th><th>Latency</th></tr></thead><tbody><tr><td>1. Port scan (nmap -sS)</td><td>DETECTED</td><td>100102</td><td>7.0s</td></tr><tr><td>2. SSH brute-force (hydra)</td><td>DETECTED</td><td>5710</td><td>7.0s</td></tr><tr><td>3. Ping flood (hping3)</td><td>DETECTED</td><td>100120</td><td>6.0s</td></tr><tr><td>4. Malware / FIM (EICAR + mass modify)</td><td>DETECTED</td><td>100200</td><td>5.0s</td></tr></tbody></table>
+  <svg viewBox="0 0 650 164" class="chart" role="img"><text x="200" y="25" class="barlabel" text-anchor="end" dominant-baseline="middle">Port scan</text><rect x="210" y="12" width="350.0" height="26" rx="4" fill="#4fd1c5"/><text x="568.0" y="25" class="barvalue" dominant-baseline="middle">7.0s</text><text x="200" y="63" class="barlabel" text-anchor="end" dominant-baseline="middle">SSH brute-force</text><rect x="210" y="50" width="350.0" height="26" rx="4" fill="#4fd1c5"/><text x="568.0" y="63" class="barvalue" dominant-baseline="middle">7.0s</text><text x="200" y="101" class="barlabel" text-anchor="end" dominant-baseline="middle">Ping flood</text><rect x="210" y="88" width="300.0" height="26" rx="4" fill="#4fd1c5"/><text x="518.0" y="101" class="barvalue" dominant-baseline="middle">6.0s</text><text x="200" y="139" class="barlabel" text-anchor="end" dominant-baseline="middle">Malware / FIM</text><rect x="210" y="126" width="250.0" height="26" rx="4" fill="#4fd1c5"/><text x="468.0" y="139" class="barvalue" dominant-baseline="middle">5.0s</text></svg>
+</section>
+
+<section><h2>Alerts by Source</h2>
+  <svg viewBox="0 0 650 88" class="chart" role="img"><text x="200" y="25" class="barlabel" text-anchor="end" dominant-baseline="middle">Suricata (network)</text><rect x="210" y="12" width="14.1" height="26" rx="4" fill="#818cf8"/><text x="232.1" y="25" class="barvalue" dominant-baseline="middle">18</text><text x="200" y="63" class="barlabel" text-anchor="end" dominant-baseline="middle">Wazuh (host)</text><rect x="210" y="50" width="350.0" height="26" rx="4" fill="#818cf8"/><text x="568.0" y="63" class="barvalue" dominant-baseline="middle">446</text></svg>
+</section>
+
+<section><h2>Detection Analysis</h2><p class="ai-text">Multiple detection mechanisms were employed. Wazuh generated 446 alerts, while Suricata generated 18. Correlated events totaled 2. Specific tests confirmed the detection of port scans (nmap), SSH brute-force attacks (hydra), ping floods (hping3), and malware/file integrity monitoring events (EICAR). The detection latency for these tests ranged from 5 to 7 seconds.</p></section>
+
+<section><h2>MITRE ATT&amp;CK</h2>
+  <table><thead><tr><th>Rule ID</th><th>Count</th><th>Tactic</th><th>Technique ID</th><th>Technique</th></tr></thead><tbody><tr><td>100120</td><td>4×</td><td>Discovery / Impact</td><td>T1046 / T1498.001</td><td>Network Service Discovery / Direct Network Flood</td></tr><tr><td>100200</td><td>16×</td><td>Command and Control</td><td>T1105</td><td>Ingress Tool Transfer</td></tr><tr><td>100201</td><td>1×</td><td>Persistence</td><td>T1554</td><td>Compromise Host Software Binary</td></tr><tr><td>100202</td><td>1×</td><td>Impact</td><td>T1486</td><td>Data Encrypted for Impact (Ransomware-like)</td></tr><tr><td>550</td><td>17×</td><td>Impact / Persistence</td><td>T1486 / T1554</td><td>File Integrity Violation</td></tr><tr><td>554</td><td>4×</td><td>Impact / Persistence</td><td>T1486 / T1554</td><td>File Integrity Violation</td></tr><tr><td>5710</td><td>48×</td><td>Credential Access</td><td>T1110.001</td><td>Brute Force: Password Guessing (SSH)</td></tr><tr><td>5712</td><td>2×</td><td>Credential Access</td><td>T1110.001</td><td>Brute Force: Password Guessing (SSH)</td></tr></tbody></table>
+  <p class="muted">Techniques shown are only those already established by the detection/correlation system — Gemini cannot introduce a technique here.</p>
+</section>
+
+<section><h2>Evidence</h2>
+  <table><thead><tr><th>Source file</th></tr></thead><tbody><tr><td>evidence\detection-results_20260916_053627.md</td></tr><tr><td>evidence\threat-hunt_20260916_054431.md</td></tr><tr><td>evidence\attack-correlation_20260916_125324.md</td></tr></tbody></table>
+</section>
+
+<section><h2>Key Findings</h2><ul class="findings"><li>High-severity incident active from 2026-09-15T20:09:27 to 2026-09-15T20:25:24.</li><li>Source IP: 10.0.2.2.</li><li>Target Hosts: &#x27;monitored&#x27;, &#x27;wazuh-server&#x27;.</li><li>MITRE ATT&amp;CK techniques observed include Network Service Discovery, Direct Network Flood, Ingress Tool Transfer, Compromise Host Software Binary, Data Encrypted for Impact, and Brute Force: Password Guessing (SSH).</li><li>Detection confirmed port scanning, SSH brute-forcing, ping floods, and malware/FIM events.</li></ul></section>
+
+<section><h2>Limitations</h2><ul class="findings"><li>The provided data does not specify the outcome of the attack or if compromise was successful.</li><li>Specific details regarding the nature of the &#x27;monitored&#x27; host are not available.</li><li>The exact sequence of events beyond the initial reconnaissance stage is not fully detailed.</li><li>The specific tools or malware used were not identified beyond the detection test names.</li></ul></section>
+
+<section><h2>Conclusion</h2><p class="ai-text">The incident exhibits characteristics of a sophisticated attack involving reconnaissance, credential harvesting, and potential data encryption. The high number of alerts and the variety of detected techniques warrant continued investigation and remediation efforts.</p></section>
+
+<footer>
+  Generated by scripts/generate_html_report.py &nbsp;|&nbsp;
+  AI model: gemini-2.5-flash-lite &nbsp;|&nbsp;
+  Prompt version: 1.0 &nbsp;|&nbsp;
+  AI status: ok &nbsp;|&nbsp;
+  Cache: stored<br>
+  Deterministic data (tables, charts, IDs, timestamps) is produced entirely by NISec's own
+  evidence pipeline. Narrative text sections are AI-authored interpretation of that data and
+  are labeled as such; they are never treated as a source of fact.
+</footer>
+
+</div></body></html>
