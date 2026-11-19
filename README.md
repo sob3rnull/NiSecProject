@@ -1,4 +1,53 @@
-# NISec — Centralized Security Monitoring System (Wazuh + Suricata)
+# NiSec | Linux host and network security monitoring
+
+How much can a single alert tell you? This UIT Network & Internet Security project brings host and network evidence into one Wazuh dashboard, measures how long a scenario takes to produce an alert and records what triggered it.
+
+**Start with a result.** The September 16 lab run recorded four idle alerts in two minutes. Its SSH scenario produced rule 5710 after seven seconds. The rule identifies an attempt against a nonexistent user. Establishing a successful login would require additional evidence. [Read the measurement and method](evidence/detection-results_20260916_053627.md).
+
+## Architecture
+
+| Node | Host-only address | Purpose |
+|---|---|---|
+| Wazuh server | 192.168.56.40 | Manager evaluates events, indexer stores results, dashboard supports investigation |
+| Monitored Linux server | 192.168.56.20 | Suricata writes network events to EVE JSON. The Wazuh agent collects these alongside host and file-integrity events |
+| Optional Linux client | 192.168.56.30 | Second monitored endpoint |
+| Kali | 192.168.56.10 | Controlled lab traffic source |
+
+Network events reach Wazuh through the agent on the monitored server. Visibility depends on traffic reaching the sensor interface. [Architecture](docs/architecture.md) · [Detection rules](config/wazuh-manager/local_rules.xml)
+
+## Explore offline on Windows
+
+Clone the repository, enter its root and use Python 3 to run the reporting checks. These commands exercise the evidence and reporting path without starting the VMs.
+
+~~~powershell
+python -m unittest discover -s tests -p test_report.py
+.\nisec.ps1 report --dry-run
+.\nisec.ps1 report --mock
+~~~
+
+Dry-run prints a request estimate. Mock mode generates a report using fixture narration. The application calculates statistics and renders HTML. Optional Gemini analysis supplies narrative. [Report configuration](docs/ai-html-report.md) · [Example output](example-ai-report.html)
+
+## Start the lab
+
+Install VirtualBox, Vagrant and Git for Windows. In PowerShell at the repository root:
+
+~~~powershell
+.\nisec.ps1 up-budget
+.\nisec.ps1 status
+.\nisec.ps1 healthcheck
+~~~
+
+Budget mode omits the client. The Vagrantfile enables it by default for a standard start. Use the host-only setup and the documented dashboard access controls. Follow the [installation guide](docs/step-by-step-guide.md) for prerequisites and the [runbook](docs/runbook.md) for service checks.
+
+## Interpreting the evidence
+
+Latency is measured from the manager clock and includes time spent in the scenario. An idle baseline helps interpret background noise. The sample performance block lacks a usable dropped-packet counter, so a packet-loss percentage cannot be calculated from it. A repeat measurement with packet and drop deltas would make that section more informative.
+
+Academic project by **Zwe Nyi Nyar**, University of Information Technology, Yangon. [Proposal traceability](docs/proposal-traceability.md) · [Risk assessment](docs/risk-assessment.md)
+
+---
+
+## Detailed project reference
 
 **Zwe Nyi Nyar — TNT-2061**
 CST-8415 Network \& Internet Security · Faculty of Computer Systems and Technologies
@@ -259,4 +308,3 @@ DVWA is optional and only needs to be green if you are doing the bonus web attac
 Everything runs on an **isolated host-only network** against **your own** VMs. That is legal and
 expected for this coursework. Never point these tools at machines you don't own or across the
 internet or your university network.
-
